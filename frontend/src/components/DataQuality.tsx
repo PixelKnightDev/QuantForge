@@ -1,4 +1,4 @@
-// frontend/src/components/DataQuality.tsx
+// frontend/src/components/DataQuality.tsx - FIXED VERSION
 import React, { useState } from 'react';
 import {
   Paper,
@@ -18,10 +18,7 @@ import {
   List,
   ListItem,
   ListItemIcon,
-  ListItemText,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails
+  ListItemText
 } from '@mui/material';
 import {
   Assessment,
@@ -31,7 +28,6 @@ import {
   Info,
   TrendingUp,
   TrendingDown,
-  ExpandMore,
   DataUsage
 } from '@mui/icons-material';
 
@@ -39,42 +35,59 @@ interface DataQualityProps {
   availableSymbols: string[];
 }
 
-interface QualityReport {
-  dataset_id: string;
+// ✅ FIXED: New interface matching the simple API response
+interface SimpleQualityReport {
   symbol: string;
-  total_expected_points: number;
-  total_actual_points: number;
-  missing_data_percentage: number;
-  price_anomalies: number;
-  volume_anomalies: number;
-  timestamp_gaps: number;
-  duplicate_records: number;
-  invalid_ohlc_sequences: number;
-  outlier_count: number;
-  data_lag_hours: number;
-  last_update: string;
-  update_frequency_score: number;
-  completeness_score: number;
-  consistency_score: number;
-  accuracy_score: number;
-  timeliness_score: number;
-  overall_quality_score: number;
+  status: string;
+  timestamp: string;
+  error?: string; // ✅ ADDED: Optional error field for error responses
+  quality: {
+    score: number;
+    completeness: number;
+    missing_data: number;
+    total_points: number;
+    duplicate_rows: number;
+  };
+  price: {
+    mean: number;
+    std: number;
+    min: number;
+    max: number;
+    latest: number;
+    volatility: number;
+  };
+  volume: {
+    mean: number;
+    std: number;
+    zero_days: number;
+    zero_percentage: number;
+  };
+  returns: {
+    total: number;
+    best_day: number;
+    worst_day: number;
+    max_drawdown: number;
+  };
+  period: {
+    start_date: string;
+    end_date: string;
+    trading_days: number;
+  };
+  assessment: string;
   recommendations: string[];
 }
 
 const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
-  // FIXED: Add default symbols as fallback
   const DEFAULT_SYMBOLS = [
     'AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'META',
     'BTC-USD', 'ETH-USD', 'ADA-USD', 'SOL-USD', 'DOGE-USD'
   ];
   
-  // Use availableSymbols if provided and not empty, otherwise use defaults
   const symbolsToUse = availableSymbols.length > 0 ? availableSymbols : DEFAULT_SYMBOLS;
 
   const [selectedSymbol, setSelectedSymbol] = useState('');
   const [selectedSource, setSelectedSource] = useState('yahoo_finance');
-  const [report, setReport] = useState<QualityReport | null>(null);
+  const [report, setReport] = useState<SimpleQualityReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,9 +124,9 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
     setError(null);
 
     try {
-      // FIXED: Use the correct API endpoint
+      // ✅ FIXED: Use the simple quality endpoint
       const response = await fetch(
-        `http://localhost:8000/api/quality-report/${selectedSymbol}?source=${selectedSource}`
+        `http://localhost:8000/api/quality-simple/${selectedSymbol}`
       );
 
       if (!response.ok) {
@@ -121,7 +134,16 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
         throw new Error(errorMessage);
       }
 
-      const qualityReport: QualityReport = await response.json();
+      const qualityReport: SimpleQualityReport = await response.json();
+      
+      // ✅ FIXED: More robust error checking
+      if (qualityReport.status === 'error') {
+        const errorMessage = qualityReport.error || 
+                           (qualityReport as any).message || 
+                           'Quality analysis failed';
+        throw new Error(errorMessage);
+      }
+      
       setReport(qualityReport);
 
     } catch (err) {
@@ -131,46 +153,48 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
     }
   };
 
+  // ✅ FIXED: Helper functions with safe number handling
   const getScoreColor = (score: number) => {
-    if (score >= 0.9) return '#4caf50';
-    if (score >= 0.7) return '#ff9800';
+    const safeScore = Number(score) || 0;
+    if (safeScore >= 90) return '#4caf50';
+    if (safeScore >= 70) return '#ff9800';
     return '#f44336';
   };
 
   const getScoreIcon = (score: number) => {
-    if (score >= 0.9) return <CheckCircle style={{ color: '#4caf50' }} />;
-    if (score >= 0.7) return <Warning style={{ color: '#ff9800' }} />;
+    const safeScore = Number(score) || 0;
+    if (safeScore >= 90) return <CheckCircle style={{ color: '#4caf50' }} />;
+    if (safeScore >= 70) return <Warning style={{ color: '#ff9800' }} />;
     return <ErrorIcon style={{ color: '#f44336' }} />;
   };
 
-  console.log('🔍 DEBUG - Symbols being used:', symbolsToUse);
-  console.log('🔍 DEBUG - Available symbols prop:', availableSymbols);
-
   const getScoreLabel = (score: number) => {
-    if (score >= 0.95) return 'Excellent';
-    if (score >= 0.85) return 'Very Good';
-    if (score >= 0.7) return 'Good';
-    if (score >= 0.5) return 'Fair';
+    const safeScore = Number(score) || 0;
+    if (safeScore >= 95) return 'Excellent';
+    if (safeScore >= 85) return 'Very Good';
+    if (safeScore >= 70) return 'Good';
+    if (safeScore >= 50) return 'Fair';
     return 'Poor';
   };
 
-  const formatPercentage = (value: number) => `${(value * 100).toFixed(1)}%`;
+  // ✅ FIXED: Safe formatting functions
+  const formatPercentage = (value: number) => `${(Number(value) || 0).toFixed(1)}%`;
+  const formatPrice = (value: number) => `$${(Number(value) || 0).toFixed(2)}`;
+  const formatNumber = (value: number) => (Number(value) || 0).toLocaleString();
 
   const getIssueColor = (value: number, threshold: number, reverse = false) => {
-    const isIssue = reverse ? value < threshold : value > threshold;
+    const safeValue = Number(value) || 0;
+    const isIssue = reverse ? safeValue < threshold : safeValue > threshold;
     return isIssue ? '#f44336' : '#4caf50';
   };
 
   const formatDate = (dateString: string) => {
     try {
-      return new Date(dateString).toLocaleString();
+      return new Date(dateString).toLocaleDateString();
     } catch {
-      return dateString;
+      return dateString || 'Unknown';
     }
   };
-
-  // FIXED: Add debug log to see what symbols are available
-  console.log('DataQuality symbols:', { availableSymbols, symbolsToUse });
 
   return (
     <Paper sx={{ p: 3 }}>
@@ -195,7 +219,6 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
             label="Symbol"
             onChange={(e) => setSelectedSymbol(e.target.value)}
           >
-            {/* FIXED: Use symbolsToUse instead of availableSymbols */}
             {symbolsToUse.map((symbol) => (
               <MenuItem key={symbol} value={symbol}>
                 {symbol}
@@ -259,13 +282,13 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
                   📊 Overall Quality Score
                 </Typography>
                 <Chip
-                  icon={getScoreIcon(report.overall_quality_score)}
-                  label={getScoreLabel(report.overall_quality_score)}
+                  icon={getScoreIcon(report.quality.score)}
+                  label={getScoreLabel(report.quality.score)}
                   sx={{ 
-                    backgroundColor: report.overall_quality_score >= 0.9 ? '#e8f5e8' :
-                                   report.overall_quality_score >= 0.7 ? '#fff8e1' : '#ffebee',
-                    color: report.overall_quality_score >= 0.9 ? '#2e7d32' :
-                           report.overall_quality_score >= 0.7 ? '#ef6c00' : '#c62828'
+                    backgroundColor: report.quality.score >= 90 ? '#e8f5e8' :
+                                   report.quality.score >= 70 ? '#fff8e1' : '#ffebee',
+                    color: report.quality.score >= 90 ? '#2e7d32' :
+                           report.quality.score >= 70 ? '#ef6c00' : '#c62828'
                   }}
                 />
               </Box>
@@ -273,19 +296,20 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
               <Box display="flex" alignItems="center" gap={2} mb={2}>
                 <Box sx={{ minWidth: 35 }}>
                   <Typography variant="body2" color="text.secondary">
-                    {formatPercentage(report.overall_quality_score)}
+                    {/* ✅ FIXED: Safe toFixed usage */}
+                    {formatPercentage(report.quality.score)}
                   </Typography>
                 </Box>
                 <Box sx={{ width: '100%' }}>
                   <LinearProgress 
                     variant="determinate" 
-                    value={report.overall_quality_score * 100}
+                    value={Number(report.quality.score) || 0}
                     sx={{ 
                       height: 10, 
                       borderRadius: 5,
                       backgroundColor: '#f5f5f5',
                       '& .MuiLinearProgress-bar': {
-                        backgroundColor: getScoreColor(report.overall_quality_score)
+                        backgroundColor: getScoreColor(report.quality.score)
                       }
                     }}
                   />
@@ -293,7 +317,7 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
               </Box>
 
               <Typography variant="body2" color="text.secondary">
-                Dataset: {report.dataset_id} • Last Updated: {formatDate(report.last_update)}
+                Dataset: {report.symbol} • Last Updated: {formatDate(report.timestamp)}
               </Typography>
             </CardContent>
           </Card>
@@ -318,23 +342,24 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
                   📋 Completeness
                 </Typography>
                 <Box display="flex" alignItems="center" gap={1} mb={1}>
-                  {getScoreIcon(report.completeness_score)}
+                  {getScoreIcon(report.quality.completeness)}
                   <Typography variant="h6">
-                    {formatPercentage(report.completeness_score)}
+                    {/* ✅ FIXED: Safe formatting */}
+                    {formatPercentage(report.quality.completeness)}
                   </Typography>
                 </Box>
                 <LinearProgress 
                   variant="determinate" 
-                  value={report.completeness_score * 100}
+                  value={Number(report.quality.completeness) || 0}
                   sx={{ 
                     mb: 1,
                     '& .MuiLinearProgress-bar': {
-                      backgroundColor: getScoreColor(report.completeness_score)
+                      backgroundColor: getScoreColor(report.quality.completeness)
                     }
                   }}
                 />
                 <Typography variant="caption" color="text.secondary">
-                  {report.total_actual_points} / {report.total_expected_points} records
+                  {formatNumber(report.quality.total_points)} records
                 </Typography>
               </CardContent>
             </Card>
@@ -342,26 +367,26 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
             <Card>
               <CardContent>
                 <Typography variant="subtitle2" gutterBottom>
-                  🎯 Accuracy
+                  💰 Price Analysis
                 </Typography>
                 <Box display="flex" alignItems="center" gap={1} mb={1}>
-                  {getScoreIcon(report.accuracy_score)}
+                  <TrendingUp style={{ color: '#4caf50' }} />
                   <Typography variant="h6">
-                    {formatPercentage(report.accuracy_score)}
+                    {formatPrice(report.price.latest)}
                   </Typography>
                 </Box>
                 <LinearProgress 
                   variant="determinate" 
-                  value={report.accuracy_score * 100}
+                  value={85} // Static for display
                   sx={{ 
                     mb: 1,
                     '& .MuiLinearProgress-bar': {
-                      backgroundColor: getScoreColor(report.accuracy_score)
+                      backgroundColor: '#4caf50'
                     }
                   }}
                 />
                 <Typography variant="caption" color="text.secondary">
-                  {report.outlier_count} outliers detected
+                  Volatility: {formatPercentage(report.price.volatility)}
                 </Typography>
               </CardContent>
             </Card>
@@ -369,26 +394,26 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
             <Card>
               <CardContent>
                 <Typography variant="subtitle2" gutterBottom>
-                  🔄 Consistency
+                  📊 Volume Analysis
                 </Typography>
                 <Box display="flex" alignItems="center" gap={1} mb={1}>
-                  {getScoreIcon(report.consistency_score)}
+                  <DataUsage style={{ color: getIssueColor(report.volume.zero_percentage, 10) }} />
                   <Typography variant="h6">
-                    {formatPercentage(report.consistency_score)}
+                    {formatNumber(report.volume.mean)}
                   </Typography>
                 </Box>
                 <LinearProgress 
                   variant="determinate" 
-                  value={report.consistency_score * 100}
+                  value={Math.max(0, 100 - Number(report.volume.zero_percentage))}
                   sx={{ 
                     mb: 1,
                     '& .MuiLinearProgress-bar': {
-                      backgroundColor: getScoreColor(report.consistency_score)
+                      backgroundColor: getIssueColor(report.volume.zero_percentage, 10)
                     }
                   }}
                 />
                 <Typography variant="caption" color="text.secondary">
-                  {report.duplicate_records} duplicates
+                  {report.volume.zero_days} zero volume days
                 </Typography>
               </CardContent>
             </Card>
@@ -396,26 +421,29 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
             <Card>
               <CardContent>
                 <Typography variant="subtitle2" gutterBottom>
-                  ⏰ Timeliness
+                  📈 Performance
                 </Typography>
                 <Box display="flex" alignItems="center" gap={1} mb={1}>
-                  {getScoreIcon(report.timeliness_score)}
+                  {Number(report.returns.total) >= 0 ? 
+                    <TrendingUp style={{ color: '#4caf50' }} /> : 
+                    <TrendingDown style={{ color: '#f44336' }} />
+                  }
                   <Typography variant="h6">
-                    {formatPercentage(report.timeliness_score)}
+                    {formatPercentage(report.returns.total)}
                   </Typography>
                 </Box>
                 <LinearProgress 
                   variant="determinate" 
-                  value={report.timeliness_score * 100}
+                  value={Math.min(100, Math.abs(Number(report.returns.total)))}
                   sx={{ 
                     mb: 1,
                     '& .MuiLinearProgress-bar': {
-                      backgroundColor: getScoreColor(report.timeliness_score)
+                      backgroundColor: Number(report.returns.total) >= 0 ? '#4caf50' : '#f44336'
                     }
                   }}
                 />
                 <Typography variant="caption" color="text.secondary">
-                  {report.data_lag_hours.toFixed(1)}h lag
+                  Max Drawdown: {formatPercentage(report.returns.max_drawdown)}
                 </Typography>
               </CardContent>
             </Card>
@@ -438,46 +466,36 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
               }}>
                 <Box sx={{ flex: 1 }}>
                   <Typography variant="subtitle2" gutterBottom>
-                    Data Issues
+                    Data Quality Metrics
                   </Typography>
                   <List dense>
                     <ListItem>
                       <ListItemIcon>
-                        <Warning style={{ color: getIssueColor(report.missing_data_percentage, 5) }} />
+                        <Warning style={{ color: getIssueColor(report.quality.missing_data, 5) }} />
                       </ListItemIcon>
                       <ListItemText
-                        primary={`Missing Data: ${report.missing_data_percentage.toFixed(1)}%`}
-                        secondary={`${Math.max(0, report.total_expected_points - report.total_actual_points)} missing records`}
+                        primary={`Missing Data: ${formatPercentage(report.quality.missing_data)}`}
+                        secondary={`${report.quality.missing_data.toFixed(1)}% of expected data points`}
                       />
                     </ListItem>
                     
                     <ListItem>
                       <ListItemIcon>
-                        <TrendingUp style={{ color: getIssueColor(report.price_anomalies, 5) }} />
+                        <ErrorIcon style={{ color: getIssueColor(report.quality.duplicate_rows, 0) }} />
                       </ListItemIcon>
                       <ListItemText
-                        primary={`Price Anomalies: ${report.price_anomalies}`}
-                        secondary="Unusual price movements detected"
+                        primary={`Duplicate Records: ${report.quality.duplicate_rows}`}
+                        secondary="Identical timestamps with different data"
                       />
                     </ListItem>
                     
                     <ListItem>
                       <ListItemIcon>
-                        <DataUsage style={{ color: getIssueColor(report.volume_anomalies, 3) }} />
+                        <CheckCircle style={{ color: '#4caf50' }} />
                       </ListItemIcon>
                       <ListItemText
-                        primary={`Volume Anomalies: ${report.volume_anomalies}`}
-                        secondary="Unusual volume patterns detected"
-                      />
-                    </ListItem>
-                    
-                    <ListItem>
-                      <ListItemIcon>
-                        <ErrorIcon style={{ color: getIssueColor(report.invalid_ohlc_sequences, 0) }} />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={`Invalid OHLC: ${report.invalid_ohlc_sequences}`}
-                        secondary="Records where High < Low or similar issues"
+                        primary={`Trading Days: ${report.period.trading_days}`}
+                        secondary={`From ${formatDate(report.period.start_date)} to ${formatDate(report.period.end_date)}`}
                       />
                     </ListItem>
                   </List>
@@ -485,46 +503,36 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
 
                 <Box sx={{ flex: 1 }}>
                   <Typography variant="subtitle2" gutterBottom>
-                    Data Integrity
+                    Price & Return Metrics
                   </Typography>
                   <List dense>
                     <ListItem>
                       <ListItemIcon>
-                        <Info style={{ color: getIssueColor(report.timestamp_gaps, 10) }} />
+                        <TrendingUp style={{ color: Number(report.returns.best_day) >= 0 ? '#4caf50' : '#f44336' }} />
                       </ListItemIcon>
                       <ListItemText
-                        primary={`Timestamp Gaps: ${report.timestamp_gaps}`}
-                        secondary="Missing time periods in the dataset"
+                        primary={`Best Day: ${formatPercentage(report.returns.best_day)}`}
+                        secondary="Largest single-day gain"
                       />
                     </ListItem>
                     
                     <ListItem>
                       <ListItemIcon>
-                        <Warning style={{ color: getIssueColor(report.duplicate_records, 0) }} />
+                        <TrendingDown style={{ color: Number(report.returns.worst_day) <= 0 ? '#f44336' : '#4caf50' }} />
                       </ListItemIcon>
                       <ListItemText
-                        primary={`Duplicate Records: ${report.duplicate_records}`}
-                        secondary="Identical timestamps with different data"
+                        primary={`Worst Day: ${formatPercentage(report.returns.worst_day)}`}
+                        secondary="Largest single-day loss"
                       />
                     </ListItem>
                     
                     <ListItem>
                       <ListItemIcon>
-                        <TrendingDown style={{ color: getIssueColor(report.outlier_count, 20) }} />
+                        <Info style={{ color: '#1976d2' }} />
                       </ListItemIcon>
                       <ListItemText
-                        primary={`Statistical Outliers: ${report.outlier_count}`}
-                        secondary="Data points that deviate significantly"
-                      />
-                    </ListItem>
-                    
-                    <ListItem>
-                      <ListItemIcon>
-                        <CheckCircle style={{ color: getIssueColor(report.update_frequency_score, 0.8, true) }} />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary={`Update Frequency: ${formatPercentage(report.update_frequency_score)}`}
-                        secondary="Consistency of data updates"
+                        primary={`Price Range: ${formatPrice(report.price.min)} - ${formatPrice(report.price.max)}`}
+                        secondary={`Average: ${formatPrice(report.price.mean)}`}
                       />
                     </ListItem>
                   </List>
@@ -533,15 +541,14 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
             </CardContent>
           </Card>
 
-          {/* Recommendations */}
-          {report.recommendations.length > 0 && (
-            <Accordion>
-              <AccordionSummary expandIcon={<ExpandMore />}>
-                <Typography variant="h6">
-                  💡 Recommendations ({report.recommendations.length})
-                </Typography>
-              </AccordionSummary>
-              <AccordionDetails>
+          {/* Assessment & Recommendations */}
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                💡 Assessment: {report.assessment.charAt(0).toUpperCase() + report.assessment.slice(1)}
+              </Typography>
+              
+              {report.recommendations.length > 0 && (
                 <List>
                   {report.recommendations.map((recommendation, index) => (
                     <ListItem key={index}>
@@ -552,9 +559,9 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
                     </ListItem>
                   ))}
                 </List>
-              </AccordionDetails>
-            </Accordion>
-          )}
+              )}
+            </CardContent>
+          </Card>
         </>
       )}
 
@@ -567,10 +574,10 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
               Data Quality Analysis
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Select a symbol and data source to generate a comprehensive quality report
+              Select a symbol to generate a comprehensive quality report
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Analysis includes completeness, accuracy, consistency, and timeliness metrics
+              Analysis includes completeness, price analysis, volume patterns, and performance metrics
             </Typography>
           </CardContent>
         </Card>
