@@ -6,7 +6,7 @@ from datetime import datetime
 
 router = APIRouter()
 
-SAMPLE_SYMBOLS = ["AAPL", "GOOGL", "MSFT", "TSLA", "BTC-USD", "ETH-USE"]
+SAMPLE_SYMBOLS = ["AAPL", "GOOGL", "MSFT", "TSLA", "BTC-USD", "ETH-USD"]
 
 @router.get("/symbols")
 async def get_available_symbols():

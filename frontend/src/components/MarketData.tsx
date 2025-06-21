@@ -1,4 +1,4 @@
-// src/components/MarketData.tsx (Alternative version)
+// src/components/MarketData.tsx
 import React, { useState } from 'react';
 import {
   Paper,
@@ -28,17 +28,27 @@ import {
   ResponsiveContainer
 } from 'recharts';
 
-import { apiService, MarketDataResponse } from '../services/apiService';
+// UPDATED: Import the new enhanced types
+import { apiService, EnhancedMarketDataResponse } from '../services/apiService';
 
 interface MarketDataProps {
   connected: boolean;
 }
 
-const SYMBOLS = ['AAPL', 'GOOGL', 'MSFT', 'TSLA', 'BTC-USD', 'ETH-USD'];
+const SYMBOLS = [
+  // Stocks
+  'AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'META',
+  
+  // Crypto (known working symbols)
+  'BTC-USD', 'ETH-USD', 'ADA-USD', 'SOL-USD', 'DOGE-USD'
+];
+const PERIODS = ['5d', '1mo', '3mo', '6mo', '1y', '2y'];
 
 const MarketData: React.FC<MarketDataProps> = ({ connected }) => {
   const [selectedSymbol, setSelectedSymbol] = useState('AAPL');
-  const [marketData, setMarketData] = useState<MarketDataResponse | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState('1y'); // NEW: Add period selection
+  // UPDATED: Use EnhancedMarketDataResponse type
+  const [marketData, setMarketData] = useState<EnhancedMarketDataResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,9 +62,12 @@ const MarketData: React.FC<MarketDataProps> = ({ connected }) => {
     setError(null);
 
     try {
-      const data = await apiService.getMarketData(selectedSymbol);
+      // UPDATED: Use the new enhanced API method with period
+      const data = await apiService.getEnhancedMarketData(selectedSymbol, selectedPeriod);
       setMarketData(data);
+      console.log(`✅ Loaded ${data.total_records} data points for ${selectedSymbol}`);
     } catch (err) {
+      console.error('❌ Market data error:', err);
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
       setLoading(false);
@@ -64,9 +77,13 @@ const MarketData: React.FC<MarketDataProps> = ({ connected }) => {
   const formatChartData = () => {
     if (!marketData) return [];
     
-    return marketData.data.slice(-30).map(point => ({
+    // Show last 30 data points or all if less than 30
+    const dataToShow = marketData.data.slice(-30);
+    
+    return dataToShow.map(point => ({
       date: new Date(point.timestamp).toLocaleDateString(),
-      price: point.close
+      price: point.close,
+      volume: point.volume
     }));
   };
 
@@ -80,12 +97,15 @@ const MarketData: React.FC<MarketDataProps> = ({ connected }) => {
   return (
     <Paper sx={{ p: 3 }}>
       <Typography variant="h5" gutterBottom>
-        📈 Market Data
+        📈 Enhanced Market Data
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Real-time market data with enhanced metrics and quality indicators
       </Typography>
 
       {/* Controls */}
       <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-        <FormControl sx={{ minWidth: 200 }}>
+        <FormControl sx={{ minWidth: 150 }}>
           <InputLabel>Symbol</InputLabel>
           <Select
             value={selectedSymbol}
@@ -101,13 +121,30 @@ const MarketData: React.FC<MarketDataProps> = ({ connected }) => {
           </Select>
         </FormControl>
 
+        {/* NEW: Period selection */}
+        <FormControl sx={{ minWidth: 120 }}>
+          <InputLabel>Period</InputLabel>
+          <Select
+            value={selectedPeriod}
+            label="Period"
+            onChange={(e) => setSelectedPeriod(e.target.value)}
+            disabled={loading || !connected}
+          >
+            {PERIODS.map((period) => (
+              <MenuItem key={period} value={period}>
+                {period.toUpperCase()}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
         <Button
           variant="contained"
           startIcon={loading ? <CircularProgress size={20} /> : <ShowChart />}
           onClick={loadMarketData}
           disabled={loading || !connected}
         >
-          Load Data
+          {loading ? 'Loading...' : 'Load Data'}
         </Button>
       </Box>
 
@@ -121,6 +158,16 @@ const MarketData: React.FC<MarketDataProps> = ({ connected }) => {
       {/* Market Data Display */}
       {marketData && latestData && (
         <>
+          {/* Data Summary Alert */}
+          <Alert severity="success" sx={{ mb: 3 }}>
+            ✅ Loaded {marketData.total_records} data points for {marketData.symbol} 
+            ({marketData.start_date.split('T')[0]} to {marketData.end_date.split('T')[0]})
+            {/* NEW: Show enhanced fields if available */}
+            {latestData.price_change !== null && (
+              <span> • Latest change: {apiService.formatPercentage(latestData.price_change_percent || 0)}</span>
+            )}
+          </Alert>
+
           {/* Current Price Cards */}
           <Box sx={{ 
             display: 'grid', 
@@ -136,6 +183,16 @@ const MarketData: React.FC<MarketDataProps> = ({ connected }) => {
                 <Typography variant="h4">
                   {apiService.formatPrice(latestData.close)}
                 </Typography>
+                {/* NEW: Show price change if available */}
+                {latestData.price_change !== null && (
+                  <Typography 
+                    variant="body2" 
+                    color={latestData.price_change >= 0 ? 'success.main' : 'error.main'}
+                  >
+                    {latestData.price_change >= 0 ? '+' : ''}{latestData.price_change?.toFixed(2)} 
+                    ({apiService.formatPercentage(latestData.price_change_percent || 0)})
+                  </Typography>
+                )}
               </CardContent>
             </Card>
 
@@ -169,6 +226,27 @@ const MarketData: React.FC<MarketDataProps> = ({ connected }) => {
                 <Typography variant="h5">
                   {apiService.formatVolume(latestData.volume)}
                 </Typography>
+                {/* NEW: Show volume ratio if available */}
+                {latestData.volume_ratio !== null && latestData.volume_ratio !== 1 && (
+                  <Typography variant="body2" color="text.secondary">
+                    {(latestData.volume_ratio * 100).toFixed(0)}% of avg
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* NEW: Data Quality Indicator */}
+            <Card>
+              <CardContent>
+                <Typography color="text.secondary" gutterBottom>
+                  Data Quality
+                </Typography>
+                <Typography variant="h5">
+                  {(latestData.confidence_score * 100).toFixed(0)}%
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {latestData.is_anomaly ? '⚠️ Anomaly detected' : '✅ Normal'}
+                </Typography>
               </CardContent>
             </Card>
           </Box>
@@ -177,7 +255,7 @@ const MarketData: React.FC<MarketDataProps> = ({ connected }) => {
           <Card sx={{ mb: 3 }}>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                📊 Price Chart - {selectedSymbol} (Last 30 Days)
+                📊 Price Chart - {selectedSymbol} (Last 30 Points)
               </Typography>
               
               <ResponsiveContainer width="100%" height={300}>
@@ -200,9 +278,10 @@ const MarketData: React.FC<MarketDataProps> = ({ connected }) => {
             </CardContent>
           </Card>
 
-          {/* Data Summary */}
+          {/* Enhanced Data Info */}
           <Alert severity="info">
-            📊 Loaded {marketData.total_records} data points for {marketData.symbol}
+            📊 Enhanced data includes price changes, volume analysis, and quality indicators • 
+            Source: {marketData.source} • Interval: {marketData.interval}
           </Alert>
         </>
       )}
@@ -215,7 +294,7 @@ const MarketData: React.FC<MarketDataProps> = ({ connected }) => {
             No Data Loaded
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Select a symbol and click "Load Data" to view market information
+            Select a symbol and period, then click "Load Data" to view enhanced market information
           </Typography>
         </Box>
       )}

@@ -1,12 +1,16 @@
-# backend/app/main.py
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
-import yfinance as yf
-import pandas as pd
-from datetime import datetime
 import logging
+from pathlib import Path
+
+# import routers
+
+from app.routers import data, backtest
+from app.routers.enhanced_data import router as enhanced_data_router
+from app.routers.indicators import router as indicator_router
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -22,219 +26,221 @@ app = FastAPI(
 # Add CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# data directories
+
+data_dir = Path("data")
+data_dir.mkdir(exist_ok=True)
+(data_dir / "uploads").mkdir(exist_ok=True)
+(data_dir / "cache").mkdir(exist_ok=True)
+(data_dir / "processed").mkdir(exist_ok=True)
+
+# mount static files for uploaded data
+
+app.mount("/static", StaticFiles(directory="data"), name="static")
+
+#include routers
+app.include_router(data.router, prefix="/api/data", tags=["Basic Data"])
+app.include_router(enhanced_data_router, prefix="/api", tags=["Advanced Data"])
+app.include_router(indicator_router, prefix="/api/indicators", tags=["indicators"])
+app.include_router(backtest.router, prefix="/api/backtest", tags=["Backtesting"])
+
+# root ednpoint
+
 @app.get("/")
+@app.get("/", tags=["System"])
 async def root():
+    """Root endpoint with API information"""
     return {
         "message": "Backtesting Platform API",
+        "version": "3.0.0",  # Update version for Phase 3
         "status": "running",
-        "version": "1.0.0"
+        "current_phase": "Phase 3 - Strategy Engine",  # Update phase
+        "documentation": "/docs",
+        "endpoints": {
+            "basic_data": "/api/data/*",
+            "enhanced_data": "/api/*",
+            "technical_indicators": "/api/indicators/*",  # NEW LINE
+            "backtesting": "/api/backtest/*",
+            "health_check": "/health"
+        },
+        "features": {
+            "phase_1": [
+                "✅ Yahoo Finance data integration",
+                "✅ Strategy validation",
+                "✅ Mock backtesting",
+                "✅ Real-time WebSocket communication"
+            ],
+            "phase_2": [
+                "✅ CSV file upload and processing",
+                "✅ Advanced data caching system",
+                "✅ Multiple data source support",
+                "✅ Data quality analysis",
+                "✅ Bulk data operations",
+                "✅ Enhanced data preprocessing"
+            ],
+            "phase_3": [  # NEW SECTION
+                "✅ Technical indicators (EMA, RSI, MACD, Bollinger Bands)",
+                "✅ Comprehensive indicator library",
+                "✅ Multi-symbol indicator calculations",
+                "✅ Indicator parameter optimization",
+                "🔄 Strategy framework (in progress)",
+                "🔄 Backtesting engine (in progress)"
+            ],
+            "upcoming": [
+                "⏳ Strategy modeling system (Phase 3)",
+                "⏳ Signal generation logic (Phase 3)",
+                "⏳ Visual strategy builder (Phase 5)",
+                "⏳ Performance analytics dashboard (Phase 4)"
+            ]
+        },
+        "data_sources": [
+            "Yahoo Finance (free)",
+            "Binance (API key required)",
+            "Coinbase Pro (API key required)",
+            "CSV Upload (custom data)"
+        ],
+        "technical_indicators": [  # NEW SECTION
+            "Moving Averages (SMA, EMA, WMA)",
+            "Momentum (RSI, Stochastic, Williams %R)",
+            "Trend (MACD, ADX)",
+            "Volatility (Bollinger Bands, ATR)",
+            "Volume (OBV, VWAP)"
+        ]
     }
 
-@app.get("/health")
-async def health():
-    return {
-        "status": "healthy",
-        "message": "API is working"
-    }
-
-@app.get("/api/data/symbols")
-async def get_symbols():
-    return ["AAPL", "GOOGL", "MSFT", "TSLA", "BTC-USD", "ETH-USD"]
-
-@app.get("/api/data/symbols/{symbol}/info")
-async def get_symbol_info(symbol: str):
+@app.get("/health", tags=["System"])
+async def health_check():
+    """Comprehensive system health check"""
     try:
-        logger.info(f"Getting info for symbol: {symbol}")
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
+        # Check data directories
+        directories_status = {
+            "data": data_dir.exists(),
+            "uploads": (data_dir / "uploads").exists(),
+            "cache": (data_dir / "cache").exists(),
+            "processed": (data_dir / "processed").exists()
+        }
         
-        if not info or len(info) == 0:
-            raise HTTPException(status_code=404, detail=f"No information found for symbol {symbol}")
+        # Check disk space (basic check)
+        import shutil
+        total, used, free = shutil.disk_usage(data_dir)
+        disk_usage = {
+            "total_gb": round(total / (1024**3), 2),
+            "used_gb": round(used / (1024**3), 2),
+            "free_gb": round(free / (1024**3), 2),
+            "usage_percent": round((used / total) * 100, 1)
+        }
         
         return {
-            "symbol": symbol,
-            "name": info.get("longName", info.get("shortName", symbol)),
-            "currency": info.get("currency", "USD"),
-            "exchange": info.get("exchange", "Unknown"),
-            "market_type": "crypto" if "-USD" in symbol else "stock"
+            "status": "healthy",
+            "message": "All systems operational",
+            "timestamp": "2024-12-01T10:00:00Z",
+            "version": "2.0.0",
+            "phase": "Phase 2 - Advanced Data Management",
+            "services": {
+                "api": "healthy",
+                "basic_data_service": "healthy",
+                "enhanced_data_service": "healthy",
+                "backtest_service": "healthy",
+                "cache_system": "healthy"
+            },
+            "infrastructure": {
+                "directories": directories_status,
+                "disk_usage": disk_usage
+            },
+            "capabilities": {
+                "data_sources": 4,
+                "supported_formats": ["CSV", "JSON", "API"],
+                "max_file_size_mb": 50,
+                "cache_enabled": True,
+                "bulk_operations": True
+            }
         }
     except Exception as e:
-        logger.error(f"Error getting symbol info for {symbol}: {str(e)}")
-        raise HTTPException(status_code=404, detail=f"Symbol {symbol} not found or data unavailable")
-
-@app.post("/api/data/market-data")
-async def get_market_data(request: dict):
-    try:
-        symbol = request.get("symbol", "AAPL")
-        period = request.get("period", "1mo")
-        interval = request.get("interval", "1d")
-        
-        logger.info(f"Getting market data for {symbol}, period: {period}, interval: {interval}")
-        
-        # Create ticker and download data
-        ticker = yf.Ticker(symbol)
-        data = ticker.history(period=period, interval=interval, auto_adjust=True, prepost=True)
-        
-        # Check if data is empty
-        if data.empty:
-            logger.warning(f"No data returned for {symbol}")
-            raise HTTPException(
-                status_code=404, 
-                detail=f"No market data found for symbol {symbol}. Please check if the symbol is correct."
-            )
-        
-        # Check if data has the required columns
-        required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
-        missing_columns = [col for col in required_columns if col not in data.columns]
-        if missing_columns:
-            logger.error(f"Missing columns for {symbol}: {missing_columns}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Data for {symbol} is missing required columns: {missing_columns}"
-            )
-        
-        # Remove any rows with NaN values
-        data = data.dropna()
-        
-        if len(data) == 0:
-            logger.warning(f"All data for {symbol} contained NaN values")
-            raise HTTPException(
-                status_code=404,
-                detail=f"No valid data available for {symbol} after cleaning"
-            )
-        
-        # Convert to list format
-        data_list = []
-        for timestamp, row in data.iterrows():
-            try:
-                data_point = {
-                    "timestamp": timestamp.isoformat(),
-                    "open": float(row["Open"]),
-                    "high": float(row["High"]),
-                    "low": float(row["Low"]),
-                    "close": float(row["Close"]),
-                    "volume": int(row["Volume"]) if not pd.isna(row["Volume"]) else 0,
-                    "symbol": symbol,
-                    "exchange": "yahoo"
-                }
-                data_list.append(data_point)
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Skipping invalid data point for {symbol} at {timestamp}: {e}")
-                continue
-        
-        if not data_list:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to process any valid data points for {symbol}"
-            )
-        
-        # Create response
-        response = {
-            "symbol": symbol,
-            "exchange": "yahoo",
-            "start_date": data_list[0]["timestamp"],
-            "end_date": data_list[-1]["timestamp"],
-            "interval": interval,
-            "data": data_list,
-            "total_records": len(data_list)
-        }
-        
-        logger.info(f"Successfully processed {len(data_list)} records for {symbol}")
-        return response
-        
-    except HTTPException:
-        # Re-raise HTTP exceptions
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error getting market data for {symbol}: {str(e)}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Internal server error while fetching data for {symbol}: {str(e)}"
+        logger.error(f"Health check error: {e}")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "message": "System health check failed",
+                "error": str(e),
+                "timestamp": "2024-12-01T10:00:00z"
+            }
         )
 
-@app.post("/api/backtest/validate-strategy")
-async def validate_strategy(strategy: dict):
+# startup event
+
+@app.on_event("startup")
+async def startup_event():
+    logger.info("🚀 Starting Backtesting Platform API v2.0.0")
+    logger.info("📊 Phase 2: Advanced Data Management")
+
+    directories = [
+        data_dir / "uploads",
+        data_dir / "cache", 
+        data_dir / "processed",
+        data_dir / "temp"
+    ]
+
+    for directory in directories:
+        directory.mkdir(exist_ok=True)
+        logger.info(f"📁 Directory ready: {directory}")
+
+    # Initialize cache cleanup task
+    import asyncio
+    from app.services.enhanced_data_service import enhanced_data_service
+    
+    # create necessary directories
+    async def periodic_cache_cleanup():
+        while True:
+            try:
+                await enhanced_data_service.cleanup_cache()
+                await asyncio.sleep(3600)  # Clean every hour
+            except Exception as e:
+                logger.error(f"Cache cleanup error: {e}")
+                await asyncio.sleep(3600)
+    
+    # Start background task
+    asyncio.create_task(periodic_cache_cleanup())
+    logger.info("🧹 Cache cleanup task started")
+    
+    logger.info("✅ Application startup completed")
+
+# shutdown event
+@app.on_event("shutdown")
+async def shutdown_event():
+    logger.info("🛑 Shutting down Backtesting Platform API")
+
+    # clean up resources
     try:
-        required_fields = ["name", "symbol"]
-        errors = []
-        warnings = []
-        
-        for field in required_fields:
-            if field not in strategy or not strategy[field]:
-                errors.append(f"Missing required field: {field}")
-        
-        return {
-            "valid": len(errors) == 0,
-            "errors": errors,
-            "warnings": warnings,
-            "strategy_hash": hash(str(strategy)),
-            "validated_at": datetime.now().isoformat()
-        }
+        from app.services.enhanced_data_service import enhanced_data_service
+        await enhanced_data_service.cleanup_cache()
+        logger.info("✅ Cache cleaned up")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Validation failed: {str(e)}")
+        logger.error(f"Shutdown cleanup completed")
 
-@app.post("/api/backtest/run")
-async def run_backtest(request: dict):
-    try:
-        strategy = request.get("strategy", {})
-        
-        return {
-            "backtest_id": f"bt_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
-            "strategy_name": strategy.get("name", "Test Strategy"),
-            "symbol": strategy.get("symbol", "AAPL"),
-            "status": "completed",
-            "start_time": datetime.now().isoformat(),
-            "total_return": 12.5,
-            "win_rate": 64.0,
-            "max_drawdown": -8.2,
-            "sharpe_ratio": 1.35,
-            "total_trades": 25,
-            "message": "Phase 1 mock result - full engine coming in Phase 3"
+# global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logger.error(f"Unhandled exception: {exc}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "message": "Internal server error",
+            "detail": str(exc),
+            "path": str(request.url),
+            "timestamp": "2024-12-01T10:00:00Z"
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
-
-@app.get("/api/backtest/history")
-async def get_backtest_history():
-    return {
-        "backtests": [
-            {
-                "backtest_id": "bt_20241201_143022",
-                "strategy_name": "EMA Crossover",
-                "symbol": "AAPL",
-                "created_at": "2024-12-01T14:30:22",
-                "status": "completed",
-                "total_return": 12.5,
-                "win_rate": 62.3
-            }
-        ],
-        "total_count": 1,
-        "timestamp": datetime.now().isoformat()
-    }
-
-@app.get("/api/data/health")
-async def data_health():
-    return {
-        "status": "healthy",
-        "service": "data_service",
-        "available_symbols": 6,
-        "timestamp": datetime.now().isoformat()
-    }
-
-@app.get("/api/backtest/health")
-async def backtest_health():
-    return {
-        "status": "healthy",
-        "service": "backtest_engine",
-        "features": ["strategy_validation", "mock_backtesting"],
-        "timestamp": datetime.now().isoformat()
-    }
+    )
 
 if __name__ == "__main__":
     print("🚀 Starting Backtesting Platform API...")
@@ -246,5 +252,6 @@ if __name__ == "__main__":
         "main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True
+        reload=True,
+        log_level="info"
     )

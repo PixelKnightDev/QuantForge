@@ -29,3 +29,7 @@ logs/
 # System
 .DS_Store
 Thumbs.db
+
+backend/data/
+
+frontend/package-lock.json
