@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Backtesting Platform - API Test</title>
+    <style>
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0; 
+            padding: 20px; 
+            background: #f5f5f5;
+        }
+        .container { 
+            max-width: 900px; 
+            margin: 0 auto; 
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 { margin: 0; font-size: 2.5em; }
+        .header p { margin: 10px 0 0 0; opacity: 0.9; }
+        
+        .content { padding: 30px; }
+        
+        .endpoint { 
+            margin: 25px 0; 
+            padding: 20px; 
+            border: 2px solid #e1e5e9;
+            border-radius: 8px;
+            background: #fafbfc;
+        }
+        .endpoint h3 { 
+            margin: 0 0 15px 0; 
+            color: #2c3e50;
+            font-size: 1.3em;
+        }
+        
+        .result { 
+            background: #f8f9fa; 
+            padding: 15px; 
+            margin: 15px 0; 
+            border-radius: 5px;
+            border-left: 4px solid #17a2b8;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            min-height: 20px;
+        }
+        
+        .result.error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        button { 
+            padding: 12px 20px; 
+            margin: 8px 8px 8px 0; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+        button:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        button:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-warning { background: #ffc107; color: #212529; }
+        .btn-info { background: #17a2b8; color: white; }
+        
+        .status { 
+            padding: 10px 15px; 
+            border-radius: 5px; 
+            font-weight: bold;
+            display: inline-block;
+            margin: 10px 0;
+        }
+        .status.connected { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .status.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .status.loading { background: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        
+        .loading { opacity: 0.6; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Backtesting Platform</h1>
+            <p>API Testing Dashboard - Phase 1</p>
+        </div>
+        
+        <div class="content">
+            <!-- Connection Status -->
+            <div class="endpoint">
+                <h3>🔌 Connection Status</h3>
+                <div id="status" class="status loading">Checking connection...</div>
+                <button class="btn-primary" onclick="testConnection()">🔄 Test Connection</button>
+                <button class="btn-info" onclick="openApiDocs()">📚 View API Docs</button>
+            </div>
+
+            <!-- Available Symbols -->
+            <div class="endpoint">
+                <h3>📊 Available Symbols</h3>
+                <button class="btn-primary" onclick="getSymbols()">Get Symbols</button>
+                <div id="symbols-result" class="result">Click "Get Symbols" to load available trading symbols...</div>
+            </div>
+
+            <!-- Market Data -->
+            <div class="endpoint">
+                <h3>📈 Market Data</h3>
+                <button class="btn-primary" onclick="getMarketData('AAPL')">📊 Get AAPL Data</button>
+                <button class="btn-primary" onclick="getMarketData('GOOGL')">📊 Get Google Data</button>
+                <button class="btn-primary" onclick="getMarketData('TSLA')">🚗 Get Tesla Data</button>
+                <button class="btn-primary" onclick="getMarketData('BTC-USD')">₿ Get Bitcoin Data</button>
+                <div id="market-data-result" class="result">Click a symbol above to load real market data from Yahoo Finance...</div>
+            </div>
+
+            <!-- Backtest Section -->
+            <div class="endpoint">
+                <h3>🎯 Backtesting</h3>
+                <button class="btn-success" onclick="validateStrategy()">✅ Validate Strategy</button>
+                <button class="btn-success" onclick="runMockBacktest()">🚀 Run Mock Backtest</button>
+                <div id="backtest-result" class="result">Phase 1: Mock backtesting with sample results...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000';
+        let isLoading = false;
+
+        function setLoading(loading) {
+            isLoading = loading;
+            document.body.classList.toggle('loading', loading);
+            
+            // Disable all buttons during loading
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = loading);
+        }
+
+        function updateStatus(message, type = 'loading') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        function updateResult(elementId, content, isError = false) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = content;
+            element.className = isError ? 'result error' : 'result';
+        }
+
+        async function makeApiCall(url, options = {}) {
+            const response = await fetch(url, {
+                timeout: 10000, // 10 second timeout
+                ...options
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                let errorMessage;
+                try {
+                    const errorData = JSON.parse(errorText);
+                    errorMessage = errorData.detail || errorData.message || `HTTP ${response.status}`;
+                } catch {
+                    errorMessage = `HTTP ${response.status}: ${errorText}`;
+                }
+                throw new Error(errorMessage);
+            }
+            
+            return await response.json();
+        }
+
+        async function testConnection() {
+            updateStatus('Testing connection...', 'loading');
+            try {
+                const data = await makeApiCall(`${API_BASE}/health`);
+                
+                if (data.status === 'healthy') {
+                    updateStatus('✅ Connected - All systems operational', 'connected');
+                } else {
+                    updateStatus('⚠️ Connected but services may have issues', 'error');
+                }
+            } catch (error) {
+                updateStatus(`❌ Connection failed: ${error.message}`, 'error');
+            }
+        }
+
+        function openApiDocs() {
+            window.open(`${API_BASE}/docs`, '_blank');
+        }
+
+        async function getSymbols() {
+            try {
+                setLoading(true);
+                const symbols = await makeApiCall(`${API_BASE}/api/data/symbols`);
+                
+                updateResult('symbols-result', `
+                    <strong>📊 Available Symbols (${symbols.length}):</strong><br><br>
+                    ${symbols.map(symbol => 
+                        `<span style="display: inline-block; margin: 3px; padding: 6px 12px; 
+                         background: linear-gradient(45deg, #e3f2fd, #bbdefb); 
+                         border-radius: 15px; font-weight: 600; cursor: pointer;"
+                         onclick="getMarketData('${symbol}')">${symbol}</span>`
+                    ).join('')}
+                    <br><br><em>💡 Click any symbol above to load its market data!</em>
+                `);
+            } catch (error) {
+                updateResult('symbols-result', `Failed to load symbols: ${error.message}`, true);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function getMarketData(symbol) {
+            try {
+                setLoading(true);
+                updateResult('market-data-result', `Loading data for ${symbol}...`);
+                
+                const data = await makeApiCall(`${API_BASE}/api/data/market-data`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        symbol: symbol,
+                        period: '1mo',
+                        interval: '1d'
+                    })
+                });
+                
+                // Check if we got valid data structure
+                if (!data || !data.data || !Array.isArray(data.data) || data.data.length === 0) {
+                    throw new Error(`No valid data received for ${symbol}`);
+                }
+                
+                const latest = data.data[data.data.length - 1];
+                const first = data.data[0];
+                
+                // Validate that we have the required fields
+                if (!latest.close || !latest.timestamp) {
+                    throw new Error(`Invalid data format received for ${symbol}`);
+                }
+                
+                const priceChange = ((latest.close - first.open) / first.open * 100).toFixed(2);
+                
+                updateResult('market-data-result', `
+                    <strong>📈 ${data.symbol} Market Data:</strong><br>
+                    📊 <strong>Total Records:</strong> ${data.total_records}<br>
+                    📅 <strong>Period:</strong> ${data.start_date.split('T')[0]} to ${data.end_date.split('T')[0]}<br>
+                    💰 <strong>Latest Close:</strong> $${latest.close.toFixed(2)}<br>
+                    📈 <strong>High:</strong> $${latest.high.toFixed(2)} | <strong>Low:</strong> $${latest.low.toFixed(2)}<br>
+                    📊 <strong>Volume:</strong> ${latest.volume.toLocaleString()}<br>
+                    📈 <strong>Period Change:</strong> <span style="color: ${priceChange >= 0 ? '#28a745' : '#dc3545'}">${priceChange >= 0 ? '+' : ''}${priceChange}%</span><br>
+                    🕐 <strong>Last Updated:</strong> ${latest.timestamp.split('T')[0]}
+                `);
+                
+            } catch (error) {
+                console.error(`Error loading ${symbol}:`, error);
+                updateResult('market-data-result', `Failed to load ${symbol} data: ${error.message}`, true);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function validateStrategy() {
+            try {
+                setLoading(true);
+                const strategy = {
+                    name: "EMA Crossover Strategy",
+                    symbol: "AAPL",
+                    description: "Simple moving average crossover"
+                };
+
+                const result = await makeApiCall(`${API_BASE}/api/backtest/validate-strategy`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(strategy)
+                });
+                
+                updateResult('backtest-result', `
+                    <strong>✅ Strategy Validation:</strong><br>
+                    🎯 <strong>Valid:</strong> ${result.valid ? '✅ Yes' : '❌ No'}<br>
+                    ${result.errors.length > 0 ? `❌ <strong>Errors:</strong> ${result.errors.join(', ')}<br>` : ''}
+                    ${result.warnings.length > 0 ? `⚠️ <strong>Warnings:</strong> ${result.warnings.join(', ')}<br>` : ''}
+                    ⏰ <strong>Validated At:</strong> ${new Date(result.validated_at).toLocaleString()}
+                `);
+            } catch (error) {
+                updateResult('backtest-result', `Strategy validation failed: ${error.message}`, true);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        async function runMockBacktest() {
+            try {
+                setLoading(true);
+                const strategy = { name: "Test Strategy", symbol: "AAPL" };
+
+                const result = await makeApiCall(`${API_BASE}/api/backtest/run`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ strategy })
+                });
+                
+                updateResult('backtest-result', `
+                    <strong>🚀 Backtest Results:</strong><br>
+                    🆔 <strong>ID:</strong> ${result.backtest_id}<br>
+                    🎯 <strong>Strategy:</strong> ${result.strategy_name}<br>
+                    📊 <strong>Symbol:</strong> ${result.symbol}<br>
+                    ✅ <strong>Status:</strong> ${result.status}<br>
+                    📈 <strong>Total Return:</strong> <span style="color: #28a745">+${result.total_return}%</span><br>
+                    🎲 <strong>Win Rate:</strong> ${result.win_rate}%<br>
+                    📉 <strong>Max Drawdown:</strong> <span style="color: #dc3545">${result.max_drawdown}%</span><br>
+                    📊 <strong>Sharpe Ratio:</strong> ${result.sharpe_ratio}<br>
+                    💼 <strong>Total Trades:</strong> ${result.total_trades}<br>
+                    📝 <strong>Note:</strong> <em>${result.message}</em>
+                `);
+            } catch (error) {
+                updateResult('backtest-result', `Backtest failed: ${error.message}`, true);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // Auto-test connection when page loads
+        window.onload = function() {
+            console.log('🚀 Backtesting Platform Test Page Loaded');
+            testConnection();
+        };
+    </script>
+</body>
+</html>
