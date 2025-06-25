@@ -50,6 +50,13 @@ class PerformanceMetrics(BaseModel):
     # Additional Metrics
     var_95: float = Field(description="Value at Risk (95%)")
     cvar_95: float = Field(description="Conditional Value at Risk (95%)")
+
+    # advanced metrics
+    avg_trade_duration_hours: float = 0.0
+    largest_win_percent: float = 0.0
+    largest_loss_percent: float = 0.0
+    turnover_percent: float = 0.0
+
     
 class DrawdownPeriod(BaseModel):
     """Represents a drawdown period"""

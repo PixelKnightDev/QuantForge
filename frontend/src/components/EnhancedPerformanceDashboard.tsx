@@ -45,6 +45,8 @@ import {
   StrategyUpdate 
 } from '../services/websocketService';
 
+import { apiService, EnhancedTradingMetrics } from '../services/apiService';
+
 // ============================================================================
 // REAL-TIME INTERFACES
 // ============================================================================
@@ -273,6 +275,249 @@ const ActivityFeed: React.FC<{
   );
 };
 
+const EnhancedTradingMetricsPanel: React.FC<{
+  metrics: EnhancedTradingMetrics;
+  isLive?: boolean;
+  }> = ({ metrics, isLive = false }) => {
+  const formatDuration = (hours: number): string => {
+      if (hours < 1) return `${(hours * 60).toFixed(0)}min`;
+      if (hours < 24) return `${hours.toFixed(1)}h`;
+      if (hours < 168) return `${(hours / 24).toFixed(1)}d`;
+      return `${(hours / 168).toFixed(1)}w`;
+    };
+
+    const getMetricColor = (value: number, type: 'positive' | 'negative' | 'neutral' = 'positive'): string => {
+      if (type === 'positive') return value > 0 ? '#4caf50' : '#f44336';
+      if (type === 'negative') return value < 0 ? '#4caf50' : '#f44336';
+      return '#2196f3';
+    };
+
+    const getTurnoverColor = (turnover: number): string => {
+      if (turnover <= 100) return '#4caf50';  // Low turnover - good
+      if (turnover <= 300) return '#ff9800';  // Medium turnover - ok
+      return '#f44336';                       // High turnover - potentially bad
+    };
+
+    return (
+    <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
+      <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        🎯 Enhanced Trading Metrics
+        {isLive && (
+          <Chip 
+            label="LIVE" 
+            color="success" 
+            size="small" 
+            sx={{ 
+              fontSize: '0.7rem',
+              animation: 'pulse 2s infinite'
+            }} 
+          />
+        )}
+      </Typography>
+      
+      <Alert severity="info" sx={{ mb: 2 }}>
+        ✨ Now includes the 4 missing metrics: Trade Duration, Largest Win/Loss, and Turnover Rate
+      </Alert>
+
+      <Grid container spacing={3}>
+        {/* NEW METRICS ROW */}
+        <Grid item xs={12}>
+          <Typography variant="subtitle1" fontWeight="bold" color="primary.main" gutterBottom>
+            🆕 New Enhanced Metrics
+          </Typography>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <Card elevation={1} sx={{ border: '2px solid #4caf50' }}>
+            <CardContent>
+              <Box display="flex" alignItems="center" gap={1}>
+                <Typography variant="body2" color="text.secondary" fontWeight="medium">
+                  ⏱️ Avg Trade Duration
+                </Typography>
+                <Chip label="NEW" color="success" size="small" />
+              </Box>
+              <Typography variant="h5" fontWeight="bold" color="primary.main">
+                {formatDuration(metrics.avg_trade_duration_hours)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {metrics.avg_trade_duration_hours.toFixed(1)} hours total
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card elevation={1} sx={{ border: '2px solid #4caf50' }}>
+            <CardContent>
+              <Box display="flex" alignItems="center" gap={1}>
+                <Typography variant="body2" color="text.secondary" fontWeight="medium">
+                  📈 Largest Win
+                </Typography>
+                <Chip label="NEW" color="success" size="small" />
+              </Box>
+              <Typography 
+                variant="h5" 
+                fontWeight="bold" 
+                color={getMetricColor(metrics.largest_win_percent, 'positive')}
+              >
+                +{metrics.largest_win_percent.toFixed(2)}%
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Best performing trade
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card elevation={1} sx={{ border: '2px solid #4caf50' }}>
+            <CardContent>
+              <Box display="flex" alignItems="center" gap={1}>
+                <Typography variant="body2" color="text.secondary" fontWeight="medium">
+                  📉 Largest Loss
+                </Typography>
+                <Chip label="NEW" color="success" size="small" />
+              </Box>
+              <Typography 
+                variant="h5" 
+                fontWeight="bold" 
+                color={getMetricColor(metrics.largest_loss_percent, 'negative')}
+              >
+                {metrics.largest_loss_percent.toFixed(2)}%
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Worst performing trade
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <Card elevation={1} sx={{ border: '2px solid #4caf50' }}>
+            <CardContent>
+              <Box display="flex" alignItems="center" gap={1}>
+                <Typography variant="body2" color="text.secondary" fontWeight="medium">
+                  🔄 Turnover Rate
+                </Typography>
+                <Chip label="NEW" color="success" size="small" />
+              </Box>
+              <Typography 
+                variant="h5" 
+                fontWeight="bold" 
+                sx={{ color: getTurnoverColor(metrics.turnover_percent) }}
+              >
+                {metrics.turnover_percent.toFixed(0)}%
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Annual portfolio turnover
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* TRADITIONAL METRICS ROW */}
+        <Grid item xs={12} sx={{ mt: 2 }}>
+          <Typography variant="subtitle1" fontWeight="bold" color="text.secondary" gutterBottom>
+            📊 Traditional Trading Metrics
+          </Typography>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <LiveMetricCard
+            title="Total Trades"
+            value={metrics.total_trades}
+            subtitle="Completed transactions"
+            color="info"
+            isLive={isLive}
+          />
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <LiveMetricCard
+            title="Win Rate"
+            value={`${metrics.win_rate.toFixed(1)}%`}
+            subtitle="Percentage of profitable trades"
+            color={metrics.win_rate >= 50 ? 'success' : 'warning'}
+            isLive={isLive}
+          />
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <LiveMetricCard
+            title="Profit Factor"
+            value={metrics.profit_factor.toFixed(2)}
+            subtitle="Gross profit / gross loss"
+            color={metrics.profit_factor >= 1.5 ? 'success' : 'warning'}
+            isLive={isLive}
+          />
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={3}>
+          <LiveMetricCard
+            title="Expectancy"
+            value={`${metrics.expectancy.toFixed(2)}%`}
+            subtitle="Expected profit per trade"
+            color={metrics.expectancy >= 0 ? 'success' : 'error'}
+            isLive={isLive}
+          />
+        </Grid>
+      </Grid>
+
+      {/* Enhanced Metrics Summary */}
+      <Box sx={{ mt: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+        <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+          📋 Enhanced Metrics Summary
+        </Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <Typography variant="body2" color="text.secondary">
+              <strong>Trading Frequency:</strong> {formatDuration(metrics.avg_trade_duration_hours)} average hold time
+            </Typography>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Typography variant="body2" color="text.secondary">
+              <strong>Performance Range:</strong> {metrics.largest_loss_percent.toFixed(1)}% to +{metrics.largest_win_percent.toFixed(1)}%
+            </Typography>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Typography variant="body2" color="text.secondary">
+              <strong>Activity Level:</strong> {metrics.turnover_percent.toFixed(0)}% annual turnover
+            </Typography>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Typography variant="body2" color="text.secondary">
+              <strong>Success Rate:</strong> {metrics.win_rate.toFixed(1)}% of {metrics.total_trades} trades
+            </Typography>
+          </Grid>
+        </Grid>
+      </Box>
+    </Paper>
+  );
+};
+
+// ADD this helper function:
+const extractEnhancedTradingMetrics = (results: any): EnhancedTradingMetrics | undefined => {
+  if (!results?.performance_metrics?.trading) {
+    return undefined;
+  }
+  
+  const trading = results.performance_metrics.trading;
+  return {
+    total_trades: trading.total_trades || 0,
+    win_rate: trading.win_rate || 0,
+    avg_trade_duration_hours: trading.avg_trade_duration_hours || 0,
+    largest_win_percent: trading.largest_win_percent || 0,
+    largest_loss_percent: trading.largest_loss_percent || 0,
+    turnover_percent: trading.turnover_percent || 0,
+    profit_factor: trading.profit_factor || 0,
+    expectancy: trading.expectancy || 0,
+    best_trade: trading.best_trade || 0,
+    worst_trade: trading.worst_trade || 0,
+    avg_win: trading.avg_win || 0,
+    avg_loss: trading.avg_loss || 0
+  };
+};
+
 // ============================================================================
 // MAIN ENHANCED COMPONENT
 // ============================================================================
@@ -289,6 +534,7 @@ const EnhancedPerformanceDashboard: React.FC<EnhancedPerformanceDashboardProps> 
   const [connectionStatus, setConnectionStatus] = useState<boolean>(false);
   const [isLiveMode, setIsLiveMode] = useState<boolean>(enableRealTime);
   const [strategyStatus, setStrategyStatus] = useState<'active' | 'stopped' | 'paused'>('stopped');
+  const enhancedTradingMetrics = extractEnhancedTradingMetrics(results);
 
   // WebSocket connection and handlers
   useEffect(() => {
@@ -373,7 +619,7 @@ const EnhancedPerformanceDashboard: React.FC<EnhancedPerformanceDashboardProps> 
   }, [strategyId]);
 
   // Determine if we should show live metrics overlay
-  const showLiveMetrics = enableRealTime && isLiveMode && realtimeMetrics && connectionStatus;
+  const showLiveMetrics = !!(enableRealTime && isLiveMode && realtimeMetrics && connectionStatus);
 
   return (
     <Box>
@@ -513,6 +759,14 @@ const EnhancedPerformanceDashboard: React.FC<EnhancedPerformanceDashboardProps> 
           </Grid>
         </Grid>
       )}
+      
+      {/* ADD NEW: Enhanced Trading Metrics Panel */}
+      {!!enhancedTradingMetrics && (
+        <EnhancedTradingMetricsPanel 
+          metrics={enhancedTradingMetrics}
+          isLive={showLiveMetrics}
+        />
+      )}
 
       {/* Original Performance Dashboard */}
       <PerformanceDashboard results={results} loading={loading} />
@@ -543,6 +797,85 @@ const EnhancedPerformanceDashboard: React.FC<EnhancedPerformanceDashboardProps> 
         `}
       </style>
     </Box>
+  );
+};
+
+// ADD this test component to debug and verify the enhanced metrics:
+export const TestEnhancedMetrics: React.FC = () => {
+  const [testResults, setTestResults] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  const runTest = async () => {
+    setLoading(true);
+    try {
+      // Test the backend endpoint
+      const results = await apiService.testEnhancedTradingMetrics();
+      setTestResults(results);
+      console.log('✅ Enhanced metrics test results:', results);
+    } catch (error) {
+      console.error('❌ Enhanced metrics test failed:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unkown error occured'
+      setTestResults({ success: false, error: errorMessage });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Paper sx={{ p: 3, m: 2 }}>
+      <Typography variant="h6" gutterBottom>
+        🧪 Test Enhanced Trading Metrics
+      </Typography>
+      
+      <button 
+        onClick={runTest} 
+        disabled={loading}
+        style={{ 
+          padding: '10px 20px',
+          backgroundColor: loading ? '#ccc' : '#1976d2',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: loading ? 'not-allowed' : 'pointer',
+          marginBottom: '16px'
+        }}
+      >
+        {loading ? 'Testing...' : 'Run Test'}
+      </button>
+
+      {testResults && (
+        <Box>
+          <Alert severity={testResults.success ? 'success' : 'error'} sx={{ mb: 2 }}>
+            {testResults.success ? 'Test completed successfully!' : `Test failed: ${testResults.error}`}
+          </Alert>
+          
+          {testResults.success && testResults.enhanced_metrics && (
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle2" gutterBottom>Enhanced Metrics:</Typography>
+                <pre style={{ 
+                  fontSize: '12px', 
+                  background: '#f5f5f5', 
+                  padding: '10px', 
+                  borderRadius: '4px',
+                  whiteSpace: 'pre-wrap'
+                }}>
+                  {JSON.stringify(testResults.enhanced_metrics, null, 2)}
+                </pre>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle2" gutterBottom>Explanations:</Typography>
+                {testResults.explanation && Object.entries(testResults.explanation).map(([key, value]) => (
+                  <Typography key={key} variant="body2" sx={{ mb: 1 }}>
+                    <strong>{key}:</strong> {value as string}
+                  </Typography>
+                ))}
+              </Grid>
+            </Grid>
+          )}
+        </Box>
+      )}
+    </Paper>
   );
 };
 

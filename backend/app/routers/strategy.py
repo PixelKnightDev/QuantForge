@@ -321,10 +321,18 @@ async def run_strategy_backtest(request: BacktestRequest):
                 "trading": {
                     "total_trades": metrics.total_trades,
                     "win_rate": metrics.win_rate,
-                    "avg_trade_duration_hours": 24 * 7,
-                    "largest_win_percent": metrics.best_trade,
-                    "largest_loss_percent": metrics.worst_trade,
-                    "turnover_percent": 100.0
+                    # NEW: Use actual calculated values from enhanced metrics
+                    "avg_trade_duration_hours": getattr(metrics, 'avg_trade_duration_hours', 24 * 7),
+                    "largest_win_percent": getattr(metrics, 'largest_win_percent', metrics.best_trade),
+                    "largest_loss_percent": getattr(metrics, 'largest_loss_percent', metrics.worst_trade),
+                    "turnover_percent": getattr(metrics, 'turnover_percent', 100.0),
+                    # Keep existing fields for backward compatibility
+                    "profit_factor": metrics.profit_factor,
+                    "expectancy": metrics.expectancy,
+                    "best_trade": metrics.best_trade,  # Keep for legacy support
+                    "worst_trade": metrics.worst_trade,  # Keep for legacy support
+                    "avg_win": metrics.avg_win,
+                    "avg_loss": metrics.avg_loss
                 },
                 "additional": {
                     "profit_factor": metrics.profit_factor,
@@ -372,247 +380,98 @@ async def run_strategy_backtest(request: BacktestRequest):
     except Exception as e:
         logger.error(f"❌ Enhanced backtest failed: {e}")
         raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
-    """Run complete strategy backtest with comprehensive performance analysis"""
+    
+# ADD a new test endpoint to your router to verify the enhanced metrics:
+@router.get("/test-enhanced-trading-metrics")
+async def test_enhanced_trading_metrics():
+    """Test endpoint to verify enhanced trading metrics are working"""
     try:
-        logger.info(f"📊 Running enhanced backtest: {strategy.name}")
-        logger.info(f"💰 Initial capital: ${initial_capital}")
+        # Create sample trade data
+        from datetime import datetime, timedelta
+        from ..models.strategy_models import Trade
         
-        # Run strategy simulation
-        portfolio = await strategy_engine.simulate_strategy(strategy, symbol, start_date, end_date)
+        # Sample trades with proper timestamps
+        sample_trades = []
+        base_time = datetime(2024, 1, 1, 9, 0, 0)
         
-        if not portfolio.trades:
-            logger.warning("No trades generated - returning basic portfolio data")
-            return {
-                "strategy": {
-                    "name": strategy.name,
-                    "description": strategy.description,
-                    "timeframe": strategy.timeframe
-                },
-                "backtest_config": {
-                    "symbol": symbol,
-                    "start_date": start_date,
-                    "end_date": end_date,
-                    "initial_capital": initial_capital
-                },
-                "portfolio": {
-                    "cash": portfolio.cash,
-                    "total_value": portfolio.total_value,
-                    "unrealized_pnl": portfolio.unrealized_pnl,
-                    "realized_pnl": portfolio.realized_pnl,
-                    "total_return_percent": portfolio.total_return_percent,
-                    "positions": [],
-                    "trades": []
-                },
-                "performance_report": {
-                    "summary": {
-                        "strategy_performance": "No trades executed",
-                        "total_return": "0.00%",
-                        "risk_assessment": "Unable to assess"
-                    },
-                    "recommendations": ["No trades were generated - check strategy conditions"]
-                }
-            }
-        
-        # Generate comprehensive performance report using your analytics
-        logger.info(f"📈 Generating comprehensive performance report with {len(portfolio.trades)} trades")
-        
-        performance_report = performance_analytics.analyze_portfolio_performance(
-            portfolio=portfolio,
-            trades=portfolio.trades,
-            symbol=symbol,
-            strategy_name=strategy.name,
-            start_date=start_date,
-            end_date=end_date,
-            benchmark_symbol="SPY"
+        # Trade 1: Quick win (2 hours, +3%)
+        trade1 = Trade(
+            symbol="AAPL",
+            entry_timestamp=base_time,
+            exit_timestamp=base_time + timedelta(hours=2),
+            entry_price=100.0,
+            exit_price=103.0,
+            quantity=100,
+            pnl=300.0,
+            pnl_percent=3.0,
+            rule_name="test_rule",
+            exit_reason="take_profit"
         )
+        sample_trades.append(trade1)
         
-        # Convert portfolio to dict for response
-        portfolio_dict = {
-            "cash": portfolio.cash,
-            "total_value": portfolio.total_value,
-            "unrealized_pnl": portfolio.unrealized_pnl,
-            "realized_pnl": portfolio.realized_pnl,
-            "total_return_percent": portfolio.total_return_percent,
-            "positions": [
-                {
-                    "symbol": pos.symbol,
-                    "entry_timestamp": pos.entry_timestamp.isoformat(),
-                    "entry_price": pos.entry_price,
-                    "quantity": pos.quantity,
-                    "current_price": pos.current_price,
-                    "unrealized_pnl": pos.unrealized_pnl,
-                    "stop_loss": pos.stop_loss,
-                    "take_profit": pos.take_profit
+        # Trade 2: Medium loss (1 day, -2%)
+        trade2 = Trade(
+            symbol="AAPL",
+            entry_timestamp=base_time + timedelta(days=1),
+            exit_timestamp=base_time + timedelta(days=2),
+            entry_price=105.0,
+            exit_price=102.9,
+            quantity=95,
+            pnl=-199.5,
+            pnl_percent=-2.0,
+            rule_name="test_rule",
+            exit_reason="stop_loss"
+        )
+        sample_trades.append(trade2)
+        
+        # Trade 3: Long hold win (1 week, +8%)
+        trade3 = Trade(
+            symbol="AAPL",
+            entry_timestamp=base_time + timedelta(days=3),
+            exit_timestamp=base_time + timedelta(days=10),
+            entry_price=102.0,
+            exit_price=110.16,
+            quantity=98,
+            pnl=799.68,
+            pnl_percent=8.0,
+            rule_name="test_rule",
+            exit_reason="take_profit"
+        )
+        sample_trades.append(trade3)
+        
+        # Test enhanced metrics calculation
+        analytics = PerformanceAnalytics()
+        enhanced_metrics = analytics._calculate_enhanced_trading_metrics(sample_trades)
+        
+        return {
+            "success": True,
+            "message": "Enhanced trading metrics test completed",
+            "sample_trades_count": len(sample_trades),
+            "enhanced_metrics": enhanced_metrics,
+            "explanation": {
+                "avg_trade_duration_hours": f"Average of {enhanced_metrics['avg_trade_duration_hours']:.1f} hours across all trades",
+                "largest_win_percent": f"Best trade: +{enhanced_metrics['largest_win_percent']:.1f}%",
+                "largest_loss_percent": f"Worst trade: {enhanced_metrics['largest_loss_percent']:.1f}%",
+                "turnover_percent": f"Portfolio turnover: {enhanced_metrics['turnover_percent']:.1f}% annually"
+            },
+            "validation": {
+                "manual_calculations": {
+                    "durations": [2.0, 24.0, 168.0],  # hours
+                    "returns": [3.0, -2.0, 8.0],  # percentages
+                    "manual_avg_duration": (2.0 + 24.0 + 168.0) / 3,
+                    "manual_max_win": 8.0,
+                    "manual_max_loss": -2.0
                 }
-                for pos in portfolio.positions
-            ],
-            "trades": [
-                {
-                    "symbol": trade.symbol,
-                    "entry_timestamp": trade.entry_timestamp.isoformat(),
-                    "exit_timestamp": trade.exit_timestamp.isoformat(),
-                    "entry_price": trade.entry_price,
-                    "exit_price": trade.exit_price,
-                    "quantity": trade.quantity,
-                    "pnl": trade.pnl,
-                    "pnl_percent": trade.pnl_percent,
-                    "rule_name": trade.rule_name,
-                    "exit_reason": trade.exit_reason
-                }
-                for trade in portfolio.trades
-            ]
-        }
-        
-        # Convert performance report to dict
-        performance_dict = {
-            "strategy_name": performance_report.strategy_name,
-            "symbol": performance_report.symbol,
-            "start_date": performance_report.start_date.isoformat(),
-            "end_date": performance_report.end_date.isoformat(),
-            "analysis_date": performance_report.analysis_date.isoformat(),
-            
-            # Core metrics
-            "metrics": performance_report.metrics.dict(),
-            "risk_analysis": performance_report.risk_analysis.dict(),
-            
-            # Detailed analysis
-            "drawdown_periods": [dd.dict() for dd in performance_report.drawdown_periods],
-            "current_drawdown": performance_report.current_drawdown.dict() if performance_report.current_drawdown else None,
-            "monthly_returns": [mr.dict() for mr in performance_report.monthly_returns],
-            "benchmark_comparison": performance_report.benchmark_comparison.dict() if performance_report.benchmark_comparison else None,
-            
-            # Configuration
-            "initial_capital": performance_report.initial_capital,
-            "risk_free_rate": performance_report.risk_free_rate
-        }
-        
-        # Create summary and recommendations
-        metrics = performance_report.metrics
-        risk_analysis = performance_report.risk_analysis
-        
-        # Generate performance assessment
-        if metrics.sharpe_ratio > 1.5:
-            performance_assessment = "Excellent"
-        elif metrics.sharpe_ratio > 1.0:
-            performance_assessment = "Good"
-        elif metrics.sharpe_ratio > 0.5:
-            performance_assessment = "Average"
-        else:
-            performance_assessment = "Poor"
-        
-        # Generate risk assessment
-        if metrics.max_drawdown < 10 and risk_analysis.annualized_volatility < 15:
-            risk_assessment = "Low Risk"
-        elif metrics.max_drawdown < 20 and risk_analysis.annualized_volatility < 25:
-            risk_assessment = "Medium Risk"
-        else:
-            risk_assessment = "High Risk"
-        
-        # Generate recommendations
-        recommendations = []
-        if metrics.sharpe_ratio < 0.5:
-            recommendations.append("Consider improving risk-adjusted returns - Sharpe ratio is below optimal")
-        if metrics.max_drawdown > 20:
-            recommendations.append("High maximum drawdown detected - consider tighter risk management")
-        if metrics.win_rate < 40:
-            recommendations.append("Low win rate - review entry criteria and market conditions")
-        if risk_analysis.annualized_volatility > 30:
-            recommendations.append("High volatility - consider position sizing adjustments")
-        if metrics.total_trades < 10:
-            recommendations.append("Low number of trades - consider longer backtest period or different parameters")
-        if metrics.profit_factor < 1.5:
-            recommendations.append("Profit factor could be improved - analyze losing trades")
-        if not recommendations:
-            recommendations.append("Strategy shows good performance characteristics")
-        
-        # Build complete response
-        response = {
-            "strategy": {
-                "name": strategy.name,
-                "description": strategy.description,
-                "timeframe": strategy.timeframe
-            },
-            "backtest_config": {
-                "symbol": symbol,
-                "start_date": start_date,
-                "end_date": end_date,
-                "initial_capital": initial_capital,
-                "data_points": len(performance_report.performance_series) if performance_report.performance_series else 0
-            },
-            "portfolio": portfolio_dict,
-            "performance_metrics": {
-                "returns": {
-                    "total_return_percent": metrics.total_return,
-                    "total_return_dollar": (metrics.total_return / 100) * initial_capital,
-                    "annualized_return": metrics.annualized_return,
-                    "cagr": metrics.annualized_return
-                },
-                "risk": {
-                    "volatility": risk_analysis.annualized_volatility,
-                    "max_drawdown": metrics.max_drawdown,
-                    "max_drawdown_dollar": (metrics.max_drawdown / 100) * initial_capital,
-                    "var_95": metrics.var_95,
-                    "var_99": risk_analysis.var_99
-                },
-                "risk_adjusted": {
-                    "sharpe_ratio": metrics.sharpe_ratio,
-                    "sortino_ratio": metrics.sortino_ratio,
-                    "calmar_ratio": metrics.calmar_ratio
-                },
-                "trading": {
-                    "total_trades": metrics.total_trades,
-                    "win_rate": metrics.win_rate,
-                    "avg_trade_duration_hours": 24 * 7,
-                    "largest_win_percent": metrics.best_trade,
-                    "largest_loss_percent": metrics.worst_trade,
-                    "turnover_percent": 100.0
-                },
-                "additional": {
-                    "profit_factor": metrics.profit_factor,
-                    "expectancy": metrics.expectancy,
-                    "recovery_factor": metrics.recovery_factor,
-                    "beta": performance_report.benchmark_comparison.beta if performance_report.benchmark_comparison else 0.0
-                }
-            },
-            "performance_report": {
-                "summary": {
-                    "strategy_performance": performance_assessment,
-                    "total_return": f"{metrics.total_return:.2f}%",
-                    "annualized_return": f"{metrics.annualized_return:.2f}%",
-                    "max_drawdown": f"{metrics.max_drawdown:.2f}%",
-                    "sharpe_ratio": f"{metrics.sharpe_ratio:.2f}",
-                    "total_trades": metrics.total_trades,
-                    "win_rate": f"{metrics.win_rate:.1f}%"
-                },
-                "detailed_metrics": performance_dict,
-                "portfolio_summary": {
-                    "final_value": f"${portfolio.total_value:.2f}",
-                    "cash": f"${portfolio.cash:.2f}",
-                    "realized_pnl": f"${portfolio.realized_pnl:.2f}",
-                    "unrealized_pnl": f"${portfolio.unrealized_pnl:.2f}",
-                    "open_positions": len(portfolio.positions)
-                },
-                "recommendations": recommendations,
-                "risk_assessment": risk_assessment
-            },
-            "metadata": {
-                "backtest_timestamp": datetime.now().isoformat(),
-                "total_signals_processed": len(portfolio.trades) * 2,
-                "performance_analytics_version": "comprehensive"
             }
         }
-        
-        logger.info(f"✅ Enhanced backtest completed successfully")
-        logger.info(f"📈 Total Return: {metrics.total_return:.2f}%")
-        logger.info(f"📊 Sharpe Ratio: {metrics.sharpe_ratio:.2f}")
-        logger.info(f"📉 Max Drawdown: {metrics.max_drawdown:.2f}%")
-        logger.info(f"🎯 Performance Assessment: {performance_assessment}")
-        
-        return response
         
     except Exception as e:
-        logger.error(f"❌ Enhanced backtest failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
+        logger.error(f"Enhanced metrics test failed: {str(e)}")
+        return {
+            "success": False,
+            "error": str(e),
+            "message": "Enhanced metrics test failed"
+        }
 
 @router.get("/examples")
 async def get_strategy_examples():

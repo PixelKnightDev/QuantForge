@@ -164,6 +164,99 @@ export interface StrategyHealthResponse {
   data_source: string;
 }
 
+// Enhanced trading metrics interface
+export interface EnhancedTradingMetrics {
+  total_trades: number;
+  win_rate: number;
+  // NEW: The 4 missing metrics from requirements
+  avg_trade_duration_hours: number;
+  largest_win_percent: number;
+  largest_loss_percent: number;
+  turnover_percent: number;
+  // Existing metrics for backward compatibility
+  profit_factor: number;
+  expectancy: number;
+  best_trade: number;
+  worst_trade: number;
+  avg_win: number;
+  avg_loss: number;
+}
+
+// Enhanced performance metrics interface
+export interface EnhancedPerformanceMetrics {
+  returns: {
+    total_return_percent: number;
+    total_return_dollar: number;
+    annualized_return: number;
+    cagr: number;
+  };
+  risk: {
+    volatility: number;
+    max_drawdown: number;
+    max_drawdown_dollar: number;
+    var_95: number;
+    var_99: number;
+  };
+  risk_adjusted: {
+    sharpe_ratio: number;
+    sortino_ratio: number;
+    calmar_ratio: number;
+  };
+  // ENHANCED: Trading metrics with the new fields
+  trading: EnhancedTradingMetrics;
+  additional: {
+    profit_factor: number;
+    expectancy: number;
+    recovery_factor: number;
+    beta: number;
+  };
+}
+
+// Enhanced backtest result interface
+export interface EnhancedBacktestResult {
+  strategy: {
+    name: string;
+    description: string;
+    timeframe: string;
+  };
+  backtest_config: {
+    symbol: string;
+    start_date: string;
+    end_date: string;
+    initial_capital: number;
+    data_points: number;
+  };
+  portfolio: StrategyPortfolio;
+  // ENHANCED: Performance metrics with new trading metrics
+  performance_metrics: EnhancedPerformanceMetrics;
+  performance_report: {
+    summary: {
+      strategy_performance: string;
+      total_return: string;
+      annualized_return: string;
+      max_drawdown: string;
+      sharpe_ratio: string;
+      total_trades: number;
+      win_rate: string;
+    };
+    detailed_metrics: any;
+    portfolio_summary: {
+      final_value: string;
+      cash: string;
+      realized_pnl: string;
+      unrealized_pnl: string;
+      open_positions: number;
+    };
+    recommendations: string[];
+    risk_assessment: string;
+  };
+  metadata: {
+    backtest_timestamp: string;
+    total_signals_processed: number;
+    performance_analytics_version: string;
+  };
+}
+
 class ApiService {
   private client: AxiosInstance;
 
@@ -442,15 +535,18 @@ class ApiService {
 
   // Run full strategy backtest (original method for backward compatibility)
   // Replace the existing runStrategyBacktest method with this:
+  /**
+   * MODIFY your existing runStrategyBacktest method to use enhanced types
+   */
   async runStrategyBacktest(
     strategy: StrategyConfig,
     symbol: string,
     startDate: string,
     endDate: string,
     initialCapital: number = 100000
-  ): Promise<any> {
+  ): Promise<EnhancedBacktestResult> {  // Changed return type
     try {
-      console.log('🚀 Running enhanced backtest with comprehensive analytics');
+      console.log('🚀 Running enhanced backtest with new trading metrics');
       console.log('📊 Request details:', {
         strategy: strategy.name,
         symbol,
@@ -467,34 +563,79 @@ class ApiService {
         initial_capital: initialCapital
       });
 
-      const data = response.data;
+      const data: EnhancedBacktestResult = response.data;
       
       console.log('✅ Enhanced backtest completed successfully');
       
-      // Handle both enhanced and legacy responses
-      if (data.performance_metrics && data.performance_report) {
-        console.log('📈 Performance metrics found:', data.performance_metrics);
-        console.log('📊 Performance report found:', data.performance_report);
+      // Validate that we have the enhanced trading metrics
+      if (data.performance_metrics?.trading) {
+        const trading = data.performance_metrics.trading;
+        console.log('📈 Enhanced Trading Metrics Received:');
+        console.log(`   • Average Trade Duration: ${trading.avg_trade_duration_hours} hours`);
+        console.log(`   • Largest Win: ${trading.largest_win_percent}%`);
+        console.log(`   • Largest Loss: ${trading.largest_loss_percent}%`);
+        console.log(`   • Turnover Rate: ${trading.turnover_percent}%`);
         
-        // Validate response structure
-        this.validateBacktestResponse(data);
-        return data; // Return enhanced response
+        // Validate the new metrics exist
+        if (trading.avg_trade_duration_hours !== undefined &&
+            trading.largest_win_percent !== undefined &&
+            trading.largest_loss_percent !== undefined &&
+            trading.turnover_percent !== undefined) {
+          console.log('✅ All enhanced trading metrics are present');
+        } else {
+          console.warn('⚠️ Some enhanced trading metrics are missing');
+        }
       } else {
-        console.warn('⚠️ Legacy response format detected');
-        // Return legacy format wrapped in enhanced structure
-        return {
-          portfolio: data,
-          performance_metrics: null,
-          performance_report: null,
-          strategy: { name: strategy.name, description: strategy.description, timeframe: strategy.timeframe },
-          backtest_config: { symbol, start_date: startDate, end_date: endDate, initial_capital: initialCapital }
-        };
+        console.warn('⚠️ Performance metrics structure is missing or incomplete');
       }
+
+      return data;
     } catch (error: any) {
       console.error('❌ Enhanced backtest failed:', error);
       throw error;
     }
   }
+
+  /**
+   * Format duration in a user-friendly way
+   */
+  formatTradeDuration(hours: number): string {
+    if (hours < 1) {
+      return `${(hours * 60).toFixed(0)} minutes`;
+    } else if (hours < 24) {
+      return `${hours.toFixed(1)} hours`;
+    } else if (hours < 168) { // 1 week
+      return `${(hours / 24).toFixed(1)} days`;
+    } else {
+      return `${(hours / 168).toFixed(1)} weeks`;
+    }
+  }
+
+  /**
+   * Get color for trading metric based on value
+   */
+  getTradingMetricColor(metric: 'win_rate' | 'turnover' | 'duration', value: number): string {
+    switch (metric) {
+      case 'win_rate':
+        if (value >= 60) return '#4caf50'; // green
+        if (value >= 40) return '#ff9800'; // orange
+        return '#f44336'; // red
+      
+      case 'turnover':
+        if (value <= 100) return '#4caf50'; // green (low turnover good)
+        if (value <= 300) return '#ff9800'; // orange
+        return '#f44336'; // red (high turnover potentially bad)
+      
+      case 'duration':
+        if (value >= 24 && value <= 168) return '#4caf50'; // green (1-7 days good)
+        if (value >= 1 && value <= 720) return '#ff9800'; // orange (1h-30days ok)
+        return '#f44336'; // red (very short or very long)
+      
+      default:
+        return '#2196f3'; // blue default
+    }
+  }
+
 
   /**
    * Run comprehensive strategy backtest with enhanced performance analytics
@@ -689,6 +830,29 @@ class ApiService {
     console.log('✅ ApiService: Strategy validation completed');
     return response.data;
   }
+
+  /**
+   * Test enhanced trading metrics endpoint
+   */
+  async testEnhancedTradingMetrics(): Promise<{
+    success: boolean;
+    enhanced_metrics: {
+      avg_trade_duration_hours: number;
+      largest_win_percent: number;
+      largest_loss_percent: number;
+      turnover_percent: number;
+    };
+    explanation: Record<string, string>;
+    validation: any;
+  }> {
+    console.log('🧪 Testing enhanced trading metrics...');
+    
+    const response = await this.client.get('/api/strategy/test-enhanced-trading-metrics');
+    
+    console.log('✅ Enhanced trading metrics test completed');
+    return response.data;
+  }
+
 }
 
 // Create and export a single instance

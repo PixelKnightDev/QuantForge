@@ -156,7 +156,7 @@ class PerformanceAnalytics:
         performance_series: List[PerformanceTimeSeriesPoint],
         portfolio: Portfolio
     ) -> PerformanceMetrics:
-        """Calculate core performance metrics with NaN safety"""
+        """Calculate core performance metrics with NaN safety(enhanced)"""
         
         if not performance_series:
             raise ValueError("No performance data available")
@@ -244,6 +244,9 @@ class PerformanceAnalytics:
         # Expectancy
         expectancy = safe_float((win_rate / 100 * avg_win) - ((100 - win_rate) / 100 * abs(avg_loss)))
         
+        # ADD NEW: Calculate enhanced trading metrics
+        enhanced_metrics = self._calculate_enhanced_trading_metrics(trades)
+
         # VaR calculation
         if daily_returns and len(daily_returns) > 10:
             var_95 = safe_float(np.percentile(daily_returns, 5))
@@ -276,7 +279,11 @@ class PerformanceAnalytics:
             profit_factor=safe_float(profit_factor),
             expectancy=safe_float(expectancy),
             var_95=safe_float(var_95 * 100),
-            cvar_95=safe_float(cvar_95 * 100)
+            cvar_95=safe_float(cvar_95 * 100),
+            avg_trade_duration_hours=enhanced_metrics['avg_trade_duration_hours'],
+            largest_win_percent=enhanced_metrics['largest_win_percent'],
+            largest_loss_percent=enhanced_metrics['largest_loss_percent'],
+            turnover_percent=enhanced_metrics['turnover_percent']
         )
     
     def _calculate_risk_metrics(
@@ -584,3 +591,75 @@ class PerformanceAnalytics:
                 excess_return=0.0,
                 outperformance_ratio=50.0
             )
+    # ADD THIS METHOD to your existing PerformanceAnalytics class
+    def _calculate_enhanced_trading_metrics(
+        self, 
+        trades: List[Trade]
+    ) -> Dict[str, float]:
+        """
+        Calculate the 4 missing trading metrics:
+        - avg_trade_duration_hours
+        - largest_win_percent  
+        - largest_loss_percent
+        - turnover_percent
+        """
+        if not trades:
+            return {
+                'avg_trade_duration_hours': 0.0,
+                'largest_win_percent': 0.0,
+                'largest_loss_percent': 0.0,
+                'turnover_percent': 0.0
+            }
+        
+        # Calculate average trade duration in hours
+        total_duration_hours = 0.0
+        valid_duration_trades = 0
+        
+        for trade in trades:
+            if hasattr(trade, 'entry_timestamp') and hasattr(trade, 'exit_timestamp'):
+                try:
+                    duration = trade.exit_timestamp - trade.entry_timestamp
+                    duration_hours = duration.total_seconds() / 3600
+                    total_duration_hours += duration_hours
+                    valid_duration_trades += 1
+                except:
+                    continue
+        
+        avg_trade_duration_hours = safe_divide(total_duration_hours, valid_duration_trades, 0.0)
+        
+        # Calculate largest win and loss percentages
+        trade_returns = [safe_float(trade.pnl_percent) for trade in trades if hasattr(trade, 'pnl_percent')]
+        
+        largest_win_percent = max(trade_returns) if trade_returns else 0.0
+        largest_loss_percent = min(trade_returns) if trade_returns else 0.0
+        
+        # Calculate turnover percentage (simplified version)
+        # Turnover = Total trade value / Average portfolio value * 100
+        total_trade_value = 0.0
+        for trade in trades:
+            if hasattr(trade, 'entry_price') and hasattr(trade, 'quantity'):
+                trade_value = safe_float(trade.entry_price) * safe_float(trade.quantity)
+                total_trade_value += trade_value
+        
+        # Estimate portfolio value from trades (this is a simplified calculation)
+        # In production, you'd want to track actual portfolio values over time
+        estimated_avg_portfolio = 100000.0  # Default to initial capital
+        if trades:
+            # Try to estimate from first trade
+            first_trade = trades[0]
+            if hasattr(first_trade, 'entry_price') and hasattr(first_trade, 'quantity'):
+                estimated_avg_portfolio = safe_float(first_trade.entry_price) * safe_float(first_trade.quantity) * 10
+        
+        # Annualized turnover rate
+        if len(trades) > 0 and estimated_avg_portfolio > 0:
+            # Assume trades span approximately 1 year for simplification
+            turnover_percent = safe_divide(total_trade_value, estimated_avg_portfolio, 0.0) * 100
+        else:
+            turnover_percent = 0.0
+        
+        return {
+            'avg_trade_duration_hours': safe_float(avg_trade_duration_hours),
+            'largest_win_percent': safe_float(largest_win_percent),
+            'largest_loss_percent': safe_float(largest_loss_percent),
+            'turnover_percent': safe_float(turnover_percent)
+        }
