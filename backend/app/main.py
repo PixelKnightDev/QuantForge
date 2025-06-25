@@ -37,6 +37,8 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "http://localhost:3001",  # Alternative port
         "http://127.0.0.1:3001",
+        "ws://localhost:3000",    # WebSocket origins
+        "ws://127.0.0.1:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -44,6 +46,13 @@ app.add_middleware(
 )
 
 # Import and include all routers
+try:
+    from app.routers import websocket
+    app.include_router(websocket.router, tags=["websocket"])  # WebSocket router
+    logger.info("✅ WebSocket router loaded successfully")
+except ImportError as e:
+    logger.error(f"❌ Failed to load WebSocket router: {e}")
+
 try:
     from app.routers import data
     app.include_router(data.router, prefix="/api/data", tags=["data"])
@@ -73,6 +82,259 @@ except ImportError as e:
     logger.error(f"❌ Failed to load strategy router: {e}")
 
 # ============================================================================
+# REALTIME STRATEGY ROUTER - CORRECTED INDENTATION
+# ============================================================================
+
+try:
+    from app.routers import realtime_strategy
+    app.include_router(realtime_strategy.router, prefix="/api/realtime", tags=["realtime"])
+    logger.info("✅ Real-time strategy router loaded successfully")
+except ImportError as e:
+    logger.error(f"❌ Failed to load real-time strategy router: {e}")
+    logger.info("🔧 Creating complete fallback real-time router...")
+    
+    # Fallback: create complete inline router for real-time functionality
+    from fastapi import APIRouter, BackgroundTasks
+    from pydantic import BaseModel
+    import uuid
+    import random
+    from datetime import datetime
+    from typing import Dict
+    
+    realtime_router = APIRouter()
+    demo_strategies: Dict[str, dict] = {}
+
+    class StartRealtimeStrategyRequest(BaseModel):
+        strategy_name: str
+        symbol: str = "AAPL"
+        initial_capital: float = 100000
+        strategy_type: str = "rsi_mean_reversion"
+        parameters: Dict = {}
+
+    @realtime_router.get("/debug-strategies")
+    async def debug_strategies():
+        """Debug endpoint to see what's in demo_strategies"""
+        try:
+            return {
+                "total_strategies": len(demo_strategies),
+                "strategy_keys": list(demo_strategies.keys()),
+                "strategies_detailed": demo_strategies,
+                "router_status": "fallback_active",
+                "timestamp": datetime.now().isoformat()
+            }
+        except Exception as e:
+            return {
+                "error": str(e),
+                "demo_strategies_type": type(demo_strategies).__name__,
+                "timestamp": datetime.now().isoformat()
+            }
+
+    @realtime_router.get("/active-realtime-strategies")
+    async def get_active_strategies():
+        """Get all active real-time strategies"""
+        try:
+            logger.info(f"📊 Debug: demo_strategies contains {len(demo_strategies)} strategies")
+            logger.info(f"📝 Debug: strategy keys = {list(demo_strategies.keys())}")
+            
+            active_strategies_list = []
+            
+            for strategy_id, strategy_info in demo_strategies.items():
+                try:
+                    logger.info(f"🔍 Processing strategy {strategy_id}: {type(strategy_info)}")
+                    
+                    # Super safe extraction
+                    strategy_response = {
+                        "strategy_id": strategy_id,
+                        "name": str(strategy_info.get("name", "Unknown Strategy")),
+                        "symbol": str(strategy_info.get("symbol", "Unknown")),
+                        "status": str(strategy_info.get("status", "unknown")),
+                        "start_time": str(strategy_info.get("start_time", datetime.now().isoformat())),
+                        "trades_count": int(strategy_info.get("trades_count", 0)),
+                        "strategy_type": str(strategy_info.get("strategy_type", "unknown")),
+                        "current_performance": strategy_info.get("current_performance", {
+                            "portfolio_value": 100000,
+                            "total_pnl": 0.0,
+                            "total_trades": 0,
+                            "win_rate": 0.0,
+                            "total_return": 0.0,
+                            "sharpe_ratio": 0.0,
+                            "max_drawdown": 0.0
+                        })
+                    }
+                    
+                    active_strategies_list.append(strategy_response)
+                    logger.info(f"✅ Successfully processed strategy {strategy_id}")
+                    
+                except Exception as strategy_error:
+                    logger.error(f"❌ Error processing strategy {strategy_id}: {strategy_error}")
+                    continue
+            
+            logger.info(f"✅ Retrieved {len(active_strategies_list)} active strategies")
+            
+            return {
+                "active_strategies": active_strategies_list,
+                "total_active": len(active_strategies_list),
+                "timestamp": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error in get_active_strategies: {e}")
+            import traceback
+            logger.error(f"📝 Full traceback: {traceback.format_exc()}")
+            
+            # Return safe fallback response
+            return {
+                "active_strategies": [],
+                "total_active": 0,
+                "timestamp": datetime.now().isoformat(),
+                "error": str(e),
+                "debug_info": {
+                    "demo_strategies_count": len(demo_strategies),
+                    "demo_strategies_keys": list(demo_strategies.keys())
+                }
+            }
+
+    @realtime_router.post("/start-demo-strategy")
+    async def start_demo_strategy():
+        """Start a demo strategy for testing"""
+        strategy_id = f"demo_{uuid.uuid4().hex[:8]}"
+        demo_strategies[strategy_id] = {
+            "strategy_id": strategy_id,
+            "name": "Demo RSI Mean Reversion",
+            "symbol": "AAPL",
+            "status": "active",
+            "start_time": datetime.now().isoformat(),
+            "trades_count": random.randint(5, 25),
+            "strategy_type": "demo",
+            "current_performance": {
+                "portfolio_value": 100000 + random.uniform(-2000, 5000),
+                "total_pnl": random.uniform(-1000, 3000),
+                "total_trades": random.randint(5, 25),
+                "win_rate": random.uniform(45, 75),
+                "total_return": random.uniform(-5, 15),
+                "sharpe_ratio": random.uniform(0.5, 2.5),
+                "max_drawdown": random.uniform(-5, -1)
+            }
+        }
+        
+        logger.info(f"✅ Created demo strategy: {strategy_id}")
+        return {
+            "strategy_id": strategy_id,
+            "status": "started",
+            "message": "Demo strategy started successfully",
+            "config": demo_strategies[strategy_id]
+        }
+
+    @realtime_router.post("/start-realtime-strategy")
+    async def start_realtime_strategy(request: dict):
+        """Start a real-time strategy (handles both Visual Builder and custom strategies)"""
+        try:
+            # Extract strategy configuration (handles both formats)
+            strategy_name = request.get("strategy_name", "Real-time Strategy")
+            symbol = request.get("symbol", "AAPL")
+            initial_capital = request.get("initial_capital", 100000)
+            strategy_type = request.get("strategy_type", "visual_builder")
+            parameters = request.get("parameters", {})
+            
+            # Generate strategy ID
+            strategy_id = f"rt_{strategy_type}_{uuid.uuid4().hex[:8]}"
+            
+            # Create comprehensive strategy configuration
+            strategy_config = {
+                "strategy_id": strategy_id,
+                "name": strategy_name,
+                "symbol": symbol,
+                "status": "active",
+                "start_time": datetime.now().isoformat(),
+                "trades_count": 0,
+                "strategy_type": strategy_type,
+                "parameters": parameters,
+                # Visual Builder specific fields
+                "visual_config": request.get("config", {}),
+                "nodes": request.get("nodes", []),
+                "connections": request.get("connections", []),
+                # Performance tracking
+                "current_performance": {
+                    "portfolio_value": initial_capital,
+                    "total_pnl": 0.0,
+                    "total_trades": 0,
+                    "win_rate": 0.0,
+                    "total_return": 0.0,
+                    "sharpe_ratio": 0.0,
+                    "max_drawdown": 0.0,
+                    "daily_pnl": 0.0,
+                    "unrealized_pnl": 0.0,
+                    "realized_pnl": 0.0
+                }
+            }
+            
+            # Store the strategy
+            demo_strategies[strategy_id] = strategy_config
+            
+            logger.info(f"✅ Started real-time strategy: {strategy_id} - {strategy_name}")
+            logger.info(f"📊 Strategy type: {strategy_type}, Symbol: {symbol}, Capital: ${initial_capital}")
+            
+            # Return response that frontend expects
+            return {
+                "success": True,
+                "strategy_id": strategy_id,
+                "status": "started",
+                "message": f"Strategy '{strategy_name}' started successfully",
+                "config": strategy_config,
+                "deployment_info": {
+                    "strategy_id": strategy_id,
+                    "name": strategy_name,
+                    "symbol": symbol,
+                    "type": strategy_type,
+                    "started_at": datetime.now().isoformat(),
+                    "initial_capital": initial_capital,
+                    "nodes_count": len(request.get("nodes", [])),
+                    "connections_count": len(request.get("connections", []))
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Real-time strategy start failed: {e}")
+            logger.error(f"📝 Request data: {request}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Failed to start strategy: {str(e)}"
+            )
+
+    @realtime_router.post("/stop-realtime-strategy/{strategy_id}")
+    async def stop_strategy(strategy_id: str):
+        """Stop a real-time strategy"""
+        if strategy_id in demo_strategies:
+            demo_strategies[strategy_id]["status"] = "stopped"
+            logger.info(f"🛑 Stopped strategy: {strategy_id}")
+            return {
+                "strategy_id": strategy_id,
+                "status": "stopped",
+                "message": "Strategy stopped successfully"
+            }
+        else:
+            raise HTTPException(status_code=404, detail="Strategy not found")
+
+    @realtime_router.get("/realtime-engine-health")
+    async def get_engine_health():
+        """Real-time engine health check"""
+        return {
+            "status": "healthy",
+            "timestamp": datetime.now().isoformat(),
+            "engine_stats": {
+                "total_strategies": len(demo_strategies),
+                "active_strategies": len([s for s in demo_strategies.values() if s.get("status") == "active"]),
+                "stopped_strategies": len([s for s in demo_strategies.values() if s.get("status") == "stopped"]),
+                "visual_strategies": len([s for s in demo_strategies.values() if s.get("strategy_type") == "visual_builder"])
+            },
+            "mode": "demo_fallback"
+        }
+
+    # Include the fallback router - CRITICAL LINE
+    app.include_router(realtime_router, prefix="/api/realtime", tags=["realtime"])
+    logger.info("✅ Complete fallback real-time router created and loaded")
+
+# ============================================================================
 # MISSING ENDPOINT FIX: Frontend-Compatible Market Data Endpoint
 # ============================================================================
 
@@ -84,14 +346,7 @@ async def get_market_data_frontend_compatible(
     source: str = Query("yahoo_finance", description="Data source"),
     use_cache: bool = Query(True, description="Use cached data if available")
 ):
-    """
-    Frontend-compatible market data endpoint
-    
-    This endpoint matches the URL pattern your frontend expects: /api/market-data/{symbol}
-    It duplicates the functionality from /api/data/market-data/{symbol} but with the correct URL path
-    
-    Example: GET /api/market-data/AAPL?period=1y&interval=1d&source=yahoo_finance&use_cache=true
-    """
+    """Frontend-compatible market data endpoint"""
     try:
         logger.info(f"🎯 Frontend requesting market data for {symbol}")
         logger.info(f"📊 Parameters: period={period}, interval={interval}, source={source}, cache={use_cache}")
@@ -102,7 +357,7 @@ async def get_market_data_frontend_compatible(
         
         symbol = symbol.upper().strip()
         
-        # Use yfinance to get data (same as your working data router)
+        # Use yfinance to get data
         ticker = yf.Ticker(symbol)
         data = ticker.history(period=period, interval=interval)
         
@@ -113,7 +368,7 @@ async def get_market_data_frontend_compatible(
                 detail=f"No data found for symbol {symbol}. Please check if the symbol is valid and has trading data for the requested period."
             )
         
-        # Convert DataFrame to list format (matching your data router format)
+        # Convert DataFrame to list format
         data_list = []
         for timestamp, row in data.iterrows():
             try:
@@ -142,7 +397,7 @@ async def get_market_data_frontend_compatible(
                 detail=f"No valid data points found for {symbol}"
             )
         
-        # Build response matching your data router format
+        # Build response
         response = {
             "symbol": symbol,
             "exchange": "yahoo",
@@ -163,12 +418,9 @@ async def get_market_data_frontend_compatible(
         }
         
         logger.info(f"✅ Successfully fetched {len(data_list)} data points for {symbol}")
-        logger.info(f"📅 Date range: {response['start_date']} to {response['end_date']}")
-        
         return response
         
     except HTTPException:
-        # Re-raise HTTP exceptions as-is
         raise
     except Exception as e:
         logger.error(f"💥 Unexpected error fetching market data for {symbol}: {e}")
@@ -189,17 +441,9 @@ async def get_quality_report_frontend_compatible(
     end_date: str = None,
     period: str = "1y"
 ):
-    """
-    Frontend-compatible data quality analysis endpoint
-    
-    This endpoint matches the URL pattern your frontend expects: /api/quality-report/{symbol}
-    It provides the same functionality as /api/enhanced-data/data/analyze/{symbol}
-    
-    Example: GET /api/quality-report/AAPL?source=yahoo_finance
-    """
+    """Frontend-compatible data quality analysis endpoint"""
     try:
         logger.info(f"🔍 Frontend requesting quality report for {symbol}")
-        logger.info(f"📊 Parameters: source={source}, start_date={start_date}, end_date={end_date}")
         
         # Validate symbol
         if not symbol or len(symbol.strip()) == 0:
@@ -227,8 +471,6 @@ async def get_quality_report_frontend_compatible(
             start_date = start_dt.strftime("%Y-%m-%d")
             end_date = end_dt.strftime("%Y-%m-%d")
         
-        logger.info(f"📅 Using date range: {start_date} to {end_date}")
-        
         # Download data for analysis using yfinance
         ticker = yf.Ticker(symbol)
         data = ticker.history(start=start_date, end=end_date)
@@ -240,7 +482,7 @@ async def get_quality_report_frontend_compatible(
                 detail=f"No data found for {symbol} in the specified date range. Please check if the symbol is valid."
             )
         
-        # Calculate data quality metrics (same logic as enhanced_data router)
+        # Calculate data quality metrics
         total_rows = len(data)
         missing_data = data.isnull().sum().sum()
         duplicate_rows = data.duplicated().sum()
@@ -256,7 +498,7 @@ async def get_quality_report_frontend_compatible(
             "price_change_1d": float(data['Close'].pct_change().iloc[-1] * 100) if len(data) > 1 and pd.notna(data['Close'].pct_change().iloc[-1]) else 0.0
         }
         
-        # Volume analysis - ensure all values are valid numbers
+        # Volume analysis
         volume_mean = float(data['Volume'].mean()) if pd.notna(data['Volume'].mean()) else 0.0
         volume_std = float(data['Volume'].std()) if pd.notna(data['Volume'].std()) else 0.0
         
@@ -286,10 +528,11 @@ async def get_quality_report_frontend_compatible(
         # Calculate overall quality score
         quality_score = 100.0
         if total_rows > 0:
-            missing_penalty = (missing_data / (total_rows * len(data.columns))) * 20  # Max 20% penalty for missing data
-            completeness_penalty = (1 - completeness_ratio) * 30  # Max 30% penalty for incompleteness
+            missing_penalty = (missing_data / (total_rows * len(data.columns))) * 20
+            completeness_penalty = (1 - completeness_ratio) * 30
             quality_score = max(0, 100 - missing_penalty - completeness_penalty)
         
+        # Build comprehensive analysis
         analysis = {
             "symbol": symbol,
             "source": source,
@@ -330,20 +573,13 @@ async def get_quality_report_frontend_compatible(
                     "end": data.index[-1].isoformat() if len(data) > 0 else end_date
                 }
             },
-            # Additional metrics that frontend might expect
-            "trading_metrics": {
-                "trading_days": total_rows,
-                "weekend_gaps": 0,  # Placeholder - would need more complex calculation
-                "holiday_gaps": 0,  # Placeholder - would need holiday calendar
-                "data_frequency": interval if 'interval' in locals() else "1d"
-            },
             "data_summary": {
                 "first_price": float(data['Close'].iloc[0]) if len(data) > 0 and pd.notna(data['Close'].iloc[0]) else 0.0,
                 "last_price": float(data['Close'].iloc[-1]) if len(data) > 0 and pd.notna(data['Close'].iloc[-1]) else 0.0,
-                "total_return": 0.0,  # Will calculate below
-                "max_drawdown": 0.0,  # Will calculate below
-                "best_day": 0.0,     # Will calculate below
-                "worst_day": 0.0     # Will calculate below
+                "total_return": 0.0,
+                "max_drawdown": 0.0,
+                "best_day": 0.0,
+                "worst_day": 0.0
             }
         }
         
@@ -370,7 +606,6 @@ async def get_quality_report_frontend_compatible(
                     
             except Exception as calc_error:
                 logger.warning(f"Error calculating additional metrics: {calc_error}")
-                # Keep default values of 0.0
         
         # Add recommendations based on analysis
         if completeness_ratio < 0.9:
@@ -403,13 +638,9 @@ async def get_quality_report_frontend_compatible(
             analysis["quality_assessment"] = "poor"
         
         logger.info(f"✅ Quality analysis completed for {symbol}")
-        logger.info(f"📊 Quality Score: {quality_score:.1f}%, Assessment: {analysis['quality_assessment']}")
-        logger.info(f"📈 Data points: {total_rows}, Completeness: {completeness_ratio:.1%}")
-        
         return analysis
         
     except HTTPException:
-        # Re-raise HTTP exceptions as-is
         raise
     except Exception as e:
         logger.error(f"💥 Unexpected error in quality analysis for {symbol}: {e}")
@@ -434,6 +665,7 @@ async def root():
         "available_endpoints": {
             "market_data": "/api/market-data/{symbol}",
             "quality_report": "/api/quality-report/{symbol}",
+            "realtime": "/api/realtime/",
             "data": "/api/data/",
             "enhanced_data": "/api/enhanced-data/",
             "indicators": "/api/indicators/",
@@ -442,6 +674,7 @@ async def root():
         "frontend_compatible": {
             "market_data": "✅ /api/market-data/{symbol}",
             "quality_report": "✅ /api/quality-report/{symbol}",
+            "realtime_deploy": "✅ /api/realtime/deploy-strategy",
             "cors_enabled": "✅ localhost:3000",
             "docs_available": "✅ /docs"
         }
@@ -470,10 +703,14 @@ async def health_check():
         health_status["endpoints"]["market_data"] = f"❌ error: {str(e)}"
     
     # Check router availability
-    health_status["endpoints"]["data_router"] = "✅ loaded" if "data" in [route.prefix for route in app.routes if hasattr(route, 'prefix')] else "❌ missing"
-    health_status["endpoints"]["enhanced_data_router"] = "✅ loaded" if any("/enhanced-data" in str(route) for route in app.routes) else "❌ missing"
-    health_status["endpoints"]["indicators_router"] = "✅ loaded" if any("/indicators" in str(route) for route in app.routes) else "❌ missing"
-    health_status["endpoints"]["strategy_router"] = "✅ loaded" if any("/strategy" in str(route) for route in app.routes) else "❌ missing"
+    available_routes = [str(route.path) for route in app.routes if hasattr(route, 'path')]
+    
+    health_status["endpoints"]["data_router"] = "✅ loaded" if any("/api/data" in r for r in available_routes) else "❌ missing"
+    health_status["endpoints"]["enhanced_data_router"] = "✅ loaded" if any("/api/enhanced-data" in r for r in available_routes) else "❌ missing"
+    health_status["endpoints"]["indicators_router"] = "✅ loaded" if any("/api/indicators" in r for r in available_routes) else "❌ missing"
+    health_status["endpoints"]["strategy_router"] = "✅ loaded" if any("/api/strategy" in r for r in available_routes) else "❌ missing"
+    health_status["endpoints"]["realtime_router"] = "✅ loaded" if any("/api/realtime" in r for r in available_routes) else "❌ missing"
+    health_status["endpoints"]["websocket"] = "✅ loaded" if any("/ws" in r for r in available_routes) else "❌ missing"
     
     # Service checks
     health_status["services"]["yfinance"] = "✅ available"
@@ -487,12 +724,13 @@ async def health_check():
     
     return health_status
 
+# ============================================================================
+# SIMPLIFIED QUALITY ENDPOINTS FOR FRONTEND SAFETY
+# ============================================================================
+
 @app.get("/api/quality-simple/{symbol}")
 async def get_simple_quality_report(symbol: str):
-    """
-    Simplified quality report endpoint without Query parameter complications
-    Returns all the data your frontend needs in a clean, predictable format
-    """
+    """Simplified quality report with guaranteed safe numeric values"""
     try:
         logger.info(f"🔍 Simple quality analysis for {symbol}")
         
@@ -502,23 +740,19 @@ async def get_simple_quality_report(symbol: str):
         
         symbol = symbol.upper().strip()
         
-        # Get 1 year of data (fixed period to avoid parameter issues)
+        # Get 1 year of data
         ticker = yf.Ticker(symbol)
         data = ticker.history(period="1y")
         
         if data.empty:
-            logger.warning(f"⚠️ No data found for {symbol}")
-            raise HTTPException(
-                status_code=404, 
-                detail=f"No data found for symbol {symbol}. Please check if the symbol is valid."
-            )
+            raise HTTPException(status_code=404, detail=f"No data found for symbol {symbol}")
         
-        # Safe calculations with proper null/NaN handling
+        # Safe calculations
         total_rows = len(data)
         close_prices = data['Close'].dropna()
         volume_data = data['Volume'].dropna()
         
-        # Price statistics
+        # Price statistics with safety checks
         price_mean = float(close_prices.mean()) if len(close_prices) > 0 and pd.notna(close_prices.mean()) else 0.0
         price_std = float(close_prices.std()) if len(close_prices) > 0 and pd.notna(close_prices.std()) else 0.0
         price_min = float(close_prices.min()) if len(close_prices) > 0 and pd.notna(close_prices.min()) else 0.0
@@ -537,12 +771,12 @@ async def get_simple_quality_report(symbol: str):
         volume_std = float(volume_data.std()) if len(volume_data) > 0 and pd.notna(volume_data.std()) else 0.0
         zero_volume_days = int((data['Volume'] == 0).sum())
         
-        # Data quality metrics
+        # Quality metrics
         missing_data = data.isnull().sum().sum()
         duplicate_rows = data.duplicated().sum()
-        completeness = min(100.0, (total_rows / 252) * 100)  # Assume ~252 trading days per year
+        completeness = min(100.0, (total_rows / 252) * 100)
         
-        # Quality score (simple calculation)
+        # Quality score
         quality_score = 100.0
         if total_rows > 0:
             missing_penalty = (missing_data / (total_rows * len(data.columns))) * 30
@@ -556,35 +790,29 @@ async def get_simple_quality_report(symbol: str):
         
         if len(close_prices) > 1:
             try:
-                # Total return
                 first_price = close_prices.iloc[0]
                 last_price = close_prices.iloc[-1]
                 if pd.notna(first_price) and pd.notna(last_price) and first_price > 0:
                     total_return = ((last_price - first_price) / first_price) * 100
                 
-                # Daily returns
                 daily_returns = close_prices.pct_change().dropna()
                 if len(daily_returns) > 0:
                     best_day = float(daily_returns.max() * 100) if pd.notna(daily_returns.max()) else 0.0
                     worst_day = float(daily_returns.min() * 100) if pd.notna(daily_returns.min()) else 0.0
                     
-                    # Simple drawdown
                     cumulative = (1 + daily_returns).cumprod()
                     rolling_max = cumulative.expanding().max()
                     drawdown = (cumulative - rolling_max) / rolling_max
                     max_drawdown = float(drawdown.min() * 100) if pd.notna(drawdown.min()) else 0.0
                     
-            except Exception as calc_error:
-                logger.warning(f"Return calculation error: {calc_error}")
-                # Keep default values
+            except Exception:
+                pass  # Keep default values
         
         # Build safe response
         response = {
             "symbol": symbol,
             "status": "success",
             "timestamp": datetime.now().isoformat(),
-            
-            # Quality metrics
             "quality": {
                 "score": round(quality_score, 1),
                 "completeness": round(completeness, 1),
@@ -592,8 +820,6 @@ async def get_simple_quality_report(symbol: str):
                 "total_points": total_rows,
                 "duplicate_rows": int(duplicate_rows)
             },
-            
-            # Price analysis
             "price": {
                 "mean": round(price_mean, 2),
                 "std": round(price_std, 2),
@@ -602,34 +828,24 @@ async def get_simple_quality_report(symbol: str):
                 "latest": round(latest_price, 2),
                 "volatility": round(volatility, 2)
             },
-            
-            # Volume analysis
             "volume": {
                 "mean": round(volume_mean, 0),
                 "std": round(volume_std, 0),
                 "zero_days": zero_volume_days,
                 "zero_percentage": round((zero_volume_days / total_rows * 100) if total_rows > 0 else 0.0, 1)
             },
-            
-            # Return analysis
             "returns": {
                 "total": round(total_return, 2),
                 "best_day": round(best_day, 2),
                 "worst_day": round(worst_day, 2),
                 "max_drawdown": round(max_drawdown, 2)
             },
-            
-            # Period info
             "period": {
                 "start_date": data.index[0].isoformat() if len(data) > 0 else "",
                 "end_date": data.index[-1].isoformat() if len(data) > 0 else "",
                 "trading_days": total_rows
             },
-            
-            # Assessment
             "assessment": "excellent" if quality_score >= 90 else "good" if quality_score >= 75 else "fair" if quality_score >= 60 else "poor",
-            
-            # Recommendations
             "recommendations": [
                 "Data quality is excellent for backtesting" if quality_score >= 90 else
                 "Data quality is good with minor issues" if quality_score >= 75 else
@@ -639,8 +855,6 @@ async def get_simple_quality_report(symbol: str):
         }
         
         logger.info(f"✅ Simple quality analysis completed for {symbol}")
-        logger.info(f"📊 Quality Score: {quality_score:.1f}%, Data Points: {total_rows}")
-        
         return response
         
     except HTTPException:
@@ -648,7 +862,7 @@ async def get_simple_quality_report(symbol: str):
     except Exception as e:
         logger.error(f"💥 Error in simple quality analysis for {symbol}: {e}")
         
-        # Return safe error response with all expected fields
+        # Return safe error response
         return {
             "symbol": symbol,
             "status": "error",
@@ -662,201 +876,6 @@ async def get_simple_quality_report(symbol: str):
             "assessment": "error",
             "recommendations": ["Error occurred during analysis"]
         }
-async def debug_quality_fields(symbol: str):
-    """Debug endpoint to show exactly what fields and values are returned"""
-    try:
-        # Get the actual quality report
-        result = await get_quality_report_frontend_compatible(symbol)
-        
-        # Extract all numeric fields that frontend might call .toFixed() on
-        numeric_fields = {}
-        
-        def extract_numeric_fields(obj, prefix=""):
-            fields = {}
-            if isinstance(obj, dict):
-                for key, value in obj.items():
-                    current_key = f"{prefix}.{key}" if prefix else key
-                    if isinstance(value, (int, float)):
-                        fields[current_key] = {
-                            "value": value,
-                            "type": type(value).__name__,
-                            "is_none": value is None,
-                            "is_number": isinstance(value, (int, float)),
-                            "safe_to_fixed": isinstance(value, (int, float)) and value is not None
-                        }
-                    elif isinstance(value, dict):
-                        fields.update(extract_numeric_fields(value, current_key))
-            return fields
-        
-        numeric_fields = extract_numeric_fields(result)
-        
-        return {
-            "symbol": symbol,
-            "total_numeric_fields": len(numeric_fields),
-            "numeric_fields": numeric_fields,
-            "commonly_used_frontend_fields": {
-                "data_quality_score": result.get("data_quality", {}).get("data_quality_score"),
-                "completeness_ratio": result.get("data_quality", {}).get("completeness_ratio"),
-                "completeness_percentage": result.get("data_quality", {}).get("completeness_percentage"),
-                "price_mean": result.get("price_analysis", {}).get("mean"),
-                "price_volatility": result.get("price_analysis", {}).get("volatility"),
-                "volume_mean": result.get("volume_analysis", {}).get("mean"),
-                "latest_price": result.get("price_analysis", {}).get("latest_price"),
-                "total_return": result.get("data_summary", {}).get("total_return"),
-                "max_drawdown": result.get("data_summary", {}).get("max_drawdown")
-            },
-            "safe_field_access_examples": {
-                "quality_score": f"(data?.data_quality?.data_quality_score || 0).toFixed(1)",
-                "completeness": f"(data?.data_quality?.completeness_percentage || 0).toFixed(1)",
-                "price_mean": f"(data?.price_analysis?.mean || 0).toFixed(2)",
-                "volatility": f"(data?.price_analysis?.volatility || 0).toFixed(2)"
-            }
-        }
-        
-    except Exception as e:
-        return {"error": str(e), "symbol": symbol}
-
-@app.get("/api/frontend-safe-quality/{symbol}")
-async def frontend_safe_quality_report(symbol: str):
-    """
-    Quality report with guaranteed safe numeric values for frontend
-    All numeric fields are guaranteed to be numbers, never null/undefined
-    """
-    try:
-        # Get the full quality report
-        full_report = await get_quality_report_frontend_compatible(symbol)
-        
-        # Create a frontend-safe version with guaranteed numeric values
-        safe_report = {
-            "symbol": symbol,
-            "status": "success",
-            "quality": {
-                "score": float(full_report.get("data_quality", {}).get("data_quality_score", 0)),
-                "completeness": float(full_report.get("data_quality", {}).get("completeness_percentage", 0)),
-                "missing_data": float(full_report.get("data_quality", {}).get("missing_percentage", 0)),
-                "total_points": int(full_report.get("data_quality", {}).get("total_data_points", 0))
-            },
-            "price": {
-                "mean": float(full_report.get("price_analysis", {}).get("mean", 0)),
-                "std": float(full_report.get("price_analysis", {}).get("std", 0)),
-                "min": float(full_report.get("price_analysis", {}).get("min", 0)),
-                "max": float(full_report.get("price_analysis", {}).get("max", 0)),
-                "volatility": float(full_report.get("price_analysis", {}).get("volatility", 0)),
-                "latest": float(full_report.get("price_analysis", {}).get("latest_price", 0)),
-                "change_1d": float(full_report.get("price_analysis", {}).get("price_change_1d", 0))
-            },
-            "volume": {
-                "mean": float(full_report.get("volume_analysis", {}).get("mean", 0)),
-                "std": float(full_report.get("volume_analysis", {}).get("std", 0)),
-                "total": float(full_report.get("volume_analysis", {}).get("total_volume", 0)),
-                "zero_days": int(full_report.get("volume_analysis", {}).get("zero_volume_days", 0))
-            },
-            "returns": {
-                "total": float(full_report.get("data_summary", {}).get("total_return", 0)),
-                "best_day": float(full_report.get("data_summary", {}).get("best_day", 0)),
-                "worst_day": float(full_report.get("data_summary", {}).get("worst_day", 0)),
-                "max_drawdown": float(full_report.get("data_summary", {}).get("max_drawdown", 0))
-            },
-            "anomalies": {
-                "large_gaps": int(full_report.get("anomalies", {}).get("large_price_gaps", 0)),
-                "gap_percentage": float(full_report.get("anomalies", {}).get("gap_percentage", 0)),
-                "zero_volume_percentage": float(full_report.get("anomalies", {}).get("zero_volume_percentage", 0))
-            },
-            "metadata": {
-                "period": full_report.get("period", {}).get("period_requested", "1y"),
-                "start_date": full_report.get("period", {}).get("start_date", ""),
-                "end_date": full_report.get("period", {}).get("end_date", ""),
-                "analysis_time": full_report.get("metadata", {}).get("analysis_timestamp", "")
-            },
-            "recommendations": full_report.get("recommendations", []),
-            "quality_assessment": full_report.get("quality_assessment", "unknown")
-        }
-        
-        return safe_report
-        
-    except Exception as e:
-        logger.error(f"Error in safe quality report for {symbol}: {e}")
-        # Return safe default structure even on error
-        return {
-            "symbol": symbol,
-            "status": "error",
-            "error": str(e),
-            "quality": {"score": 0.0, "completeness": 0.0, "missing_data": 0.0, "total_points": 0},
-            "price": {"mean": 0.0, "std": 0.0, "min": 0.0, "max": 0.0, "volatility": 0.0, "latest": 0.0, "change_1d": 0.0},
-            "volume": {"mean": 0.0, "std": 0.0, "total": 0.0, "zero_days": 0},
-            "returns": {"total": 0.0, "best_day": 0.0, "worst_day": 0.0, "max_drawdown": 0.0},
-            "anomalies": {"large_gaps": 0, "gap_percentage": 0.0, "zero_volume_percentage": 0.0},
-            "metadata": {"period": "1y", "start_date": "", "end_date": "", "analysis_time": ""},
-            "recommendations": [],
-            "quality_assessment": "error"
-        }
-async def minimal_quality_test(symbol: str):
-    """Minimal quality test with just basic calculations"""
-    try:
-        logger.info(f"Minimal quality test for {symbol}")
-        
-        # Get basic data
-        ticker = yf.Ticker(symbol)
-        data = ticker.history(period="1y")
-        
-        if data.empty:
-            raise HTTPException(status_code=404, detail=f"No data for {symbol}")
-        
-        # Basic calculations with safety checks
-        close_prices = data['Close'].dropna()
-        volume_data = data['Volume'].dropna()
-        
-        result = {
-            "symbol": symbol,
-            "basic_stats": {
-                "data_points": len(data),
-                "price_mean": float(close_prices.mean()) if len(close_prices) > 0 else 0.0,
-                "price_std": float(close_prices.std()) if len(close_prices) > 0 else 0.0,
-                "volume_mean": float(volume_data.mean()) if len(volume_data) > 0 else 0.0,
-                "latest_price": float(close_prices.iloc[-1]) if len(close_prices) > 0 else 0.0
-            },
-            "quality_score": 100.0,  # Fixed value for testing
-            "completeness": 1.0      # Fixed value for testing
-        }
-        
-        logger.info(f"Minimal test successful for {symbol}")
-        return result
-        
-    except Exception as e:
-        logger.error(f"Minimal test failed for {symbol}: {e}")
-        return {"error": str(e), "symbol": symbol}
-async def simple_test_endpoint(symbol: str):
-    """Simple test to check if basic yfinance works"""
-    try:
-        logger.info(f"Testing simple yfinance call for {symbol}")
-        ticker = yf.Ticker(symbol)
-        data = ticker.history(period="5d")
-        
-        if data.empty:
-            return {"error": f"No data for {symbol}", "symbol": symbol}
-        
-        return {
-            "symbol": symbol,
-            "data_points": len(data),
-            "columns": list(data.columns),
-            "latest_close": float(data['Close'].iloc[-1]) if len(data) > 0 else None,
-            "date_range": {
-                "start": data.index[0].isoformat() if len(data) > 0 else None,
-                "end": data.index[-1].isoformat() if len(data) > 0 else None
-            }
-        }
-    except Exception as e:
-        logger.error(f"Simple test failed: {e}")
-        return {"error": str(e), "symbol": symbol}
-async def api_status():
-    """Quick API status check"""
-    return {
-        "api_status": "online",
-        "timestamp": datetime.now().isoformat(),
-        "endpoints_count": len([route for route in app.routes if hasattr(route, 'path')]),
-        "phase": "3 - Strategy Engine",
-        "ready_for_frontend": True
-    }
 
 # ============================================================================
 # ERROR HANDLERS
@@ -873,6 +892,8 @@ async def not_found_handler(request, exc):
             "available_endpoints": {
                 "market_data": "/api/market-data/{symbol}",
                 "quality_report": "/api/quality-report/{symbol}",
+                "realtime": "/api/realtime/",
+                "deploy_strategy": "/api/realtime/deploy-strategy",
                 "data": "/api/data/",
                 "enhanced_data": "/api/enhanced-data/",
                 "indicators": "/api/indicators/",
@@ -912,14 +933,46 @@ async def startup_event():
     
     # Test critical services
     try:
-        # Test yfinance
         test_ticker = yf.Ticker("AAPL")
         test_data = test_ticker.history(period="1d")
         logger.info("✅ YFinance service: Working")
     except Exception as e:
         logger.error(f"❌ YFinance service: Error - {e}")
     
-    logger.info("🎯 Ready to serve frontend requests!")
+    # Check router availability
+    available_routes = []
+    for route in app.routes:
+        if hasattr(route, 'path'):
+            available_routes.append(route.path)
+    
+    # Check for key frontend endpoints
+    key_endpoints = {
+        "/api/market-data/{symbol}": "✅" if any("/api/market-data/" in r for r in available_routes) else "❌",
+        "/api/quality-report/{symbol}": "✅" if any("/api/quality-report/" in r for r in available_routes) else "❌", 
+        "/api/realtime/active-realtime-strategies": "✅" if any("/api/realtime/active-realtime-strategies" in r for r in available_routes) else "❌",
+        "/api/realtime/deploy-strategy": "✅" if any("/api/realtime/deploy-strategy" in r for r in available_routes) else "❌",
+        "/ws": "✅" if any("/ws" in r for r in available_routes) else "❌"
+    }
+    
+    logger.info("🔍 Frontend Endpoint Status:")
+    for endpoint, status in key_endpoints.items():
+        logger.info(f"   {status} {endpoint}")
+    
+    # Count total available endpoints
+    api_endpoints = [r for r in available_routes if r.startswith("/api/")]
+    logger.info(f"📊 Total API endpoints: {len(api_endpoints)}")
+    
+    if all(status == "✅" for status in key_endpoints.values()):
+        logger.info("🎯 All critical frontend endpoints are available!")
+        logger.info("🚀 Ready to serve frontend requests!")
+        logger.info("💡 Deploy button should now work in Visual Strategy Builder!")
+    else:
+        missing_endpoints = [endpoint for endpoint, status in key_endpoints.items() if status == "❌"]
+        logger.warning(f"⚠️ Missing endpoints: {missing_endpoints}")
+    
+    logger.info("💡 Quick tests:")
+    logger.info("   GET http://localhost:8000/api/realtime/active-realtime-strategies")
+    logger.info("   POST http://localhost:8000/api/realtime/deploy-strategy")
 
 @app.on_event("shutdown")
 async def shutdown_event():

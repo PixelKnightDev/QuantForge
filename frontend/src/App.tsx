@@ -1,4 +1,4 @@
-// src/App.tsx - Updated for Phase 3: Visual Strategy Builder
+// src/App.tsx - Updated for Phase 3 + WebSocket Real-time Features
 import React, { useState, useEffect } from 'react';
 import {
   ThemeProvider,
@@ -14,7 +14,9 @@ import {
   Tooltip,
   Tabs,
   Tab,
-  Paper
+  Paper,
+  Badge,
+  Chip
 } from '@mui/material';
 import {
   TrendingUp,
@@ -25,7 +27,10 @@ import {
   Assessment,
   ShowChart,
   Psychology as PsychologyIcon,
-  AutoGraph as AutoGraphIcon
+  AutoGraph as AutoGraphIcon,
+  Speed as SpeedIcon,
+  Wifi,
+  WifiOff
 } from '@mui/icons-material';
 
 // Import existing components
@@ -35,11 +40,17 @@ import CsvUpload from './components/CsvUpload';
 import BulkDownload from './components/BulkDownload';
 import DataQuality from './components/DataQuality';
 
-// Import NEW Visual Strategy Builder
+// Import Visual Strategy Builder
 import VisualStrategyBuilder from './components/VisualStrategyBuilder';
+
+// Import NEW Real-time components
+import EnhancedPerformanceDashboard from './components/EnhancedPerformanceDashboard';
+import RealtimeDashboard from './components/RealtimeDashboard';
 
 // Import API service
 import { apiService } from './services/apiService';
+// Import WebSocket service
+import { websocketService } from './services/websocketService';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -66,10 +77,16 @@ function TabPanel(props: TabPanelProps) {
 function App() {
   const [darkMode, setDarkMode] = useState(false);
   const [apiConnected, setApiConnected] = useState(false);
+  const [wsConnected, setWsConnected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentTab, setCurrentTab] = useState(4); // Default to Strategy Builder
+  const [currentTab, setCurrentTab] = useState(5); // Default to Strategy Builder
   const [availableSymbols, setAvailableSymbols] = useState<string[]>([]);
+  
+  // Real-time strategy state
+  const [backtestResults, setBacktestResults] = useState(null);
+  const [currentStrategyId, setCurrentStrategyId] = useState<string>('');
+  const [activeStrategiesCount, setActiveStrategiesCount] = useState(0);
 
   // Create theme
   const theme = createTheme({
@@ -91,6 +108,92 @@ function App() {
       },
     }
   });
+
+// Updated WebSocket connection management for App.tsx
+useEffect(() => {
+  const initializeWebSocket = async () => {
+    try {
+      console.log('🔄 Initializing WebSocket connection...');
+      await websocketService.connect();
+      console.log('🔴 WebSocket connected successfully from App.tsx');
+      
+      // CLEAR PHANTOM SUBSCRIPTIONS
+      console.log('🧹 Clearing any phantom subscriptions...');
+      websocketService.clearAllSubscriptions();
+      setActiveStrategiesCount(0);
+      
+      setWsConnected(true);
+    } catch (error) {
+      console.error('❌ WebSocket connection failed:', error);
+      setWsConnected(false);
+    }
+  };
+
+  const handleConnectionStatus = (connected: boolean) => {
+    setWsConnected(connected);
+    console.log('📡 WebSocket status changed:', connected ? 'Connected' : 'Disconnected');
+    
+    if (connected) {
+      console.log('✅ WebSocket is now connected and ready for real-time features');
+      // Clear subscriptions on successful connection
+      websocketService.clearAllSubscriptions();
+      setActiveStrategiesCount(0);
+    } else {
+      console.log('⚠️ WebSocket disconnected - real-time features unavailable');
+      setActiveStrategiesCount(0);
+    }
+  };
+
+  // Set up WebSocket connection status handler
+  websocketService.onConnectionStatusChange(handleConnectionStatus);
+  
+  // Check if already connected, if not, try to connect
+  const isAlreadyConnected = websocketService.isWebSocketConnected();
+  setWsConnected(isAlreadyConnected);
+  
+  if (isAlreadyConnected) {
+    console.log('📡 WebSocket already connected');
+    // Clear phantom subscriptions even if already connected
+    websocketService.clearAllSubscriptions();
+    setActiveStrategiesCount(0);
+  } else {
+    // Connect after API is ready (with small delay to ensure backend is fully loaded)
+    if (apiConnected) {
+      console.log('🚀 API connected, initializing WebSocket...');
+      setTimeout(() => {
+        initializeWebSocket();
+      }, 500); // Small delay to ensure backend is ready
+    }
+  }
+
+  // Monitor active strategies count (with better error handling)
+  const updateActiveStrategies = () => {
+    try {
+      const subscribed = websocketService.getSubscribedStrategies();
+      const count = subscribed.length;
+      setActiveStrategiesCount(count);
+      
+      if (count > 0) {
+        console.log(`📊 Active strategies being monitored: ${count}`, subscribed);
+      }
+    } catch (error) {
+      console.error('❌ Error updating active strategies count:', error);
+      setActiveStrategiesCount(0);
+    }
+  };
+
+  // Update active strategies count periodically (less frequently)
+  const interval = setInterval(updateActiveStrategies, 10000); // Every 10 seconds instead of 5
+
+  // Initial update
+  updateActiveStrategies();
+
+  return () => {
+    clearInterval(interval);
+    console.log('🧹 Cleaning up WebSocket connection management');
+    // Note: We don't disconnect here as other components might still need it
+  };
+}, [apiConnected]); // IMPORTANT: Add apiConnected as dependency
 
   // Test API connection
   const testConnection = async () => {
@@ -161,6 +264,20 @@ function App() {
     // You could show a success notification here
   };
 
+  // Handle backtest completion from VisualStrategyBuilder
+  const handleBacktestComplete = (results: any) => {
+    console.log('🎯 Backtest completed:', results);
+    setBacktestResults(results);
+    setCurrentTab(6); // Switch to Performance Dashboard
+  };
+
+  // Handle real-time strategy start
+  const handleRealtimeStrategyStart = (strategyId: string) => {
+    console.log('🚀 Real-time strategy started:', strategyId);
+    setCurrentStrategyId(strategyId);
+    setCurrentTab(6); // Switch to Real-time Dashboard
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -170,10 +287,38 @@ function App() {
         <Toolbar>
           <TrendingUp sx={{ mr: 2 }} />
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            Backtesting Platform - Phase 3
+            Backtesting Platform - Real-time Edition
           </Typography>
+          
+          {/* Connection Status Indicators */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mr: 2 }}>
+            {/* API Status */}
+            <Tooltip title={`API: ${apiConnected ? 'Connected' : 'Disconnected'}`}>
+              <Chip
+                icon={<ShowChart />}
+                label="API"
+                color={apiConnected ? 'success' : 'error'}
+                size="small"
+                variant="outlined"
+              />
+            </Tooltip>
+            
+            {/* WebSocket Status */}
+            <Tooltip title={`WebSocket: ${wsConnected ? 'Connected' : 'Disconnected'}`}>
+              <Badge badgeContent={activeStrategiesCount} color="secondary">
+                <Chip
+                  icon={wsConnected ? <Wifi /> : <WifiOff />}
+                  label="Live"
+                  color={wsConnected ? 'success' : 'error'}
+                  size="small"
+                  variant="outlined"
+                />
+              </Badge>
+            </Tooltip>
+          </Box>
+          
           <Typography variant="body2" sx={{ mr: 2, opacity: 0.8 }}>
-            Visual Strategy Builder & Analytics
+            Visual Builder + Real-time Updates
           </Typography>
           
           <Tooltip title="Toggle dark mode">
@@ -199,23 +344,28 @@ function App() {
           onRefresh={testConnection}
         />
 
-        {/* Phase 3 Feature Announcement */}
+        {/* Real-time Features Announcement */}
         <Paper 
           elevation={3} 
           sx={{ 
             p: 3, 
             mb: 4, 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            background: wsConnected 
+              ? 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)'
+              : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             color: 'white'
           }}
         >
           <Typography variant="h5" gutterBottom align="center">
-            🚀 Phase 3: Visual Strategy Builder
+            {wsConnected ? '🔴 Real-time Trading Platform' : '🚀 Advanced Backtesting Platform'}
           </Typography>
           <Typography variant="body1" align="center" sx={{ mb: 2 }}>
-            New features: Visual Drag & Drop Strategy Builder • Technical Indicators • Real Backtesting • Performance Analytics
+            {wsConnected 
+              ? 'Live WebSocket connection active • Real-time strategy monitoring • Live performance updates'
+              : 'Visual Strategy Builder • Technical Indicators • Comprehensive Backtesting • Performance Analytics'
+            }
           </Typography>
-          <Box display="flex" justifyContent="center" gap={2}>
+          <Box display="flex" justifyContent="center" gap={3}>
             <Box display="flex" alignItems="center">
               <PsychologyIcon sx={{ mr: 1 }} />
               <Typography variant="body2">Visual Builder</Typography>
@@ -228,6 +378,12 @@ function App() {
               <Assessment sx={{ mr: 1 }} />
               <Typography variant="body2">Performance Analytics</Typography>
             </Box>
+            {wsConnected && (
+              <Box display="flex" alignItems="center">
+                <SpeedIcon sx={{ mr: 1 }} />
+                <Typography variant="body2">Real-time Updates</Typography>
+              </Box>
+            )}
           </Box>
         </Paper>
 
@@ -270,6 +426,22 @@ function App() {
               label="Strategy Builder" 
               id="tab-4"
               aria-controls="tabpanel-4"
+            />
+            <Tab 
+              icon={<AutoGraphIcon />} 
+              label="Performance" 
+              id="tab-5"
+              aria-controls="tabpanel-5"
+            />
+            <Tab 
+              icon={
+                <Badge badgeContent={wsConnected ? activeStrategiesCount : 0} color="error">
+                  <SpeedIcon />
+                </Badge>
+              } 
+              label="Real-time" 
+              id="tab-6"
+              aria-controls="tabpanel-6"
             />
           </Tabs>
         </Paper>
@@ -315,14 +487,58 @@ function App() {
           )}
         </TabPanel>
 
-        {/* NEW Visual Strategy Builder Tab */}
+        {/* Visual Strategy Builder Tab */}
         <TabPanel value={currentTab} index={4}>
           {apiConnected ? (
-            <VisualStrategyBuilder availableSymbols={availableSymbols} />
+            <VisualStrategyBuilder 
+              availableSymbols={availableSymbols}
+              onBacktestComplete={handleBacktestComplete}
+              onRealtimeStrategyStart={handleRealtimeStrategyStart}
+            />
           ) : (
             <Paper sx={{ p: 3, textAlign: 'center' }}>
               <Alert severity="warning">
                 Please connect to the API to use visual strategy builder
+              </Alert>
+            </Paper>
+          )}
+        </TabPanel>
+
+        {/* Enhanced Performance Dashboard Tab */}
+        <TabPanel value={currentTab} index={5}>
+          {backtestResults ? (
+            <EnhancedPerformanceDashboard 
+              results={backtestResults}
+              strategyId={currentStrategyId}
+              enableRealTime={wsConnected && !!currentStrategyId}
+            />
+          ) : (
+            <Paper sx={{ p: 3, textAlign: 'center' }}>
+              <Alert severity="info">
+                <Typography variant="h6" gutterBottom>No Performance Data</Typography>
+                <Typography>
+                  Run a backtest from the Strategy Builder to see comprehensive performance analytics here.
+                </Typography>
+              </Alert>
+            </Paper>
+          )}
+        </TabPanel>
+
+        {/* Real-time Dashboard Tab */}
+        <TabPanel value={currentTab} index={6}>
+          {wsConnected ? (
+            <RealtimeDashboard />
+          ) : (
+            <Paper sx={{ p: 3, textAlign: 'center' }}>
+              <Alert severity="warning">
+                <Typography variant="h6" gutterBottom>WebSocket Connection Required</Typography>
+                <Typography>
+                  Real-time monitoring requires an active WebSocket connection. 
+                  {apiConnected 
+                    ? ' The WebSocket service appears to be offline.' 
+                    : ' Please ensure the API is connected and WebSocket service is running.'
+                  }
+                </Typography>
               </Alert>
             </Paper>
           )}
@@ -333,48 +549,51 @@ function App() {
           <Alert severity="success" sx={{ mb: 3 }}>
             📊 Loaded {availableSymbols.length} symbols for analysis: {availableSymbols.slice(0, 8).join(', ')}
             {availableSymbols.length > 8 && `, +${availableSymbols.length - 8} more`}
+            {wsConnected && (
+              <> • 🔴 Real-time monitoring available</>
+            )}
           </Alert>
         )}
 
-        {/* Phase Progress */}
+        {/* Enhanced Phase Progress */}
         <Paper elevation={1} sx={{ p: 3, mt: 4 }}>
           <Typography variant="h6" gutterBottom>
-            🎯 Development Progress
+            🎯 Platform Capabilities
           </Typography>
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 2 }}>
             <Box>
               <Typography variant="subtitle2" color="success.main" gutterBottom>
-                ✅ Phase 1-2: Data Foundation Complete
+                ✅ Data Foundation Complete
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                • Backend API with FastAPI<br />
-                • Market data loading & CSV upload<br />
-                • Data quality analysis<br />
-                • Bulk download operations
+                • FastAPI backend with comprehensive endpoints<br />
+                • Market data loading & CSV operations<br />
+                • Data quality analysis & validation<br />
+                • Bulk download & upload operations
               </Typography>
             </Box>
             
             <Box>
               <Typography variant="subtitle2" color="success.main" gutterBottom>
-                ✅ Phase 3: Visual Strategy Builder Complete
+                ✅ Visual Strategy Builder Complete
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                • Visual drag & drop interface<br />
-                • Technical indicators (RSI, SMA, MACD, etc.)<br />
-                • Real-time strategy testing<br />
-                • Complete backtesting engine
+                • Drag & drop visual interface<br />
+                • 15+ technical indicators (RSI, MACD, SMA, etc.)<br />
+                • Complete backtesting engine<br />
+                • Strategy templates & examples
               </Typography>
             </Box>
             
             <Box>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                ⏳ Phase 4: Performance Dashboard (Next)
+              <Typography variant="subtitle2" color={wsConnected ? "success.main" : "warning.main"} gutterBottom>
+                {wsConnected ? '✅' : '⚡'} Real-time Features {wsConnected ? 'Active' : 'Available'}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                • Interactive performance charts<br />
-                • Advanced analytics dashboard<br />
-                • Risk metrics visualization<br />
-                • Strategy comparison tools
+                • WebSocket real-time updates<br />
+                • Live strategy monitoring<br />
+                • Real-time performance metrics<br />
+                • Multi-strategy dashboard
               </Typography>
             </Box>
           </Box>
@@ -383,13 +602,18 @@ function App() {
         {/* Footer */}
         <Box sx={{ mt: 6, py: 3, textAlign: 'center' }}>
           <Typography variant="h6" gutterBottom>
-            🎉 Phase 3: Visual Strategy Builder Complete!
+            {wsConnected 
+              ? '🔴 Real-time Trading Platform Ready!' 
+              : '🎉 Advanced Backtesting Platform Complete!'
+            }
           </Typography>
           <Typography variant="body2" color="text.secondary" gutterBottom>
-            ✅ Visual Builder • ✅ Technical Indicators • ✅ Real Backtesting • ✅ Strategy Examples
+            ✅ Visual Builder • ✅ Technical Indicators • ✅ Comprehensive Backtesting • ✅ Performance Analytics
+            {wsConnected && ' • ✅ Real-time Updates'}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            Backend: Strategy Engine + Technical Indicators • Frontend: React + TypeScript + Drag & Drop UI
+            Backend: Strategy Engine + WebSocket Server • Frontend: React + TypeScript + Material-UI
+            {wsConnected && ' • Live WebSocket Connection Active'}
           </Typography>
         </Box>
       </Container>

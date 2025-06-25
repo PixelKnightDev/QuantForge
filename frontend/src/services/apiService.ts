@@ -619,6 +619,76 @@ class ApiService {
     const response = await this.client.get('/api/strategy/health');
     return response.data;
   }
+  // ADD THESE METHODS TO YOUR ApiService class in apiService.ts:
+
+  // NEW: Deploy real-time strategy
+  async deployRealtimeStrategy(payload: {
+    strategy_name: string;
+    symbol: string;
+    initial_capital: number;
+    max_position?: number;
+    position_size?: number;
+    strategy_type?: string;
+    parameters?: any;
+  }): Promise<any> {
+    console.log('🚀 ApiService: Deploying real-time strategy...');
+    console.log('📋 Payload:', payload);
+  
+    const response = await this.client.post('/api/realtime/start-realtime-strategy', payload);
+    
+    console.log('✅ ApiService: Real-time strategy deployed successfully');
+    return response.data;
+  }
+
+  // NEW: Get active real-time strategies
+  async getActiveRealtimeStrategies(): Promise<any> {
+    console.log('🔄 ApiService: Fetching active real-time strategies...');
+    
+    const response = await this.client.get('/api/realtime/active-realtime-strategies');
+    
+    console.log('📊 ApiService: Retrieved active strategies:', response.data);
+    return response.data;
+  }
+
+  // NEW: Stop real-time strategy
+  async stopRealtimeStrategy(strategyId: string): Promise<any> {
+    console.log(`🛑 ApiService: Stopping strategy ${strategyId}...`);
+    
+    const response = await this.client.post(`/api/realtime/stop-realtime-strategy/${strategyId}`);
+    
+    console.log(`✅ ApiService: Strategy ${strategyId} stopped successfully`);
+    return response.data;
+  }
+
+  // NEW: Get strategy status
+  async getRealtimeStrategyStatus(strategyId: string): Promise<any> {
+    console.log(`📊 ApiService: Getting status for strategy ${strategyId}...`);
+    
+    const response = await this.client.get(`/api/realtime/realtime-strategy-status/${strategyId}`);
+    
+    console.log(`✅ ApiService: Retrieved strategy status for ${strategyId}`);
+    return response.data;
+  }
+
+  // NEW: Get strategy templates
+  async getStrategyTemplates(): Promise<any> {
+    console.log('📋 ApiService: Fetching strategy templates...');
+    
+    const response = await this.client.get('/api/realtime/strategy-templates');
+    
+    console.log('✅ ApiService: Retrieved strategy templates');
+    return response.data;
+  }
+
+  // NEW: Validate strategy before deployment
+  async validateRealtimeStrategy(payload: any): Promise<any> {
+    console.log('🔍 ApiService: Validating strategy configuration...');
+    
+    const response = await this.client.post('/api/realtime/validate-strategy', payload);
+    
+    console.log('✅ ApiService: Strategy validation completed');
+    return response.data;
+  }
 }
 
 // Create and export a single instance

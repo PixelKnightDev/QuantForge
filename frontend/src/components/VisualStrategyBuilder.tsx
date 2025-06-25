@@ -1,4 +1,4 @@
-// src/components/VisualStrategyBuilder.tsx
+// src/components/VisualStrategyBuilder.tsx - Fixed with required props
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -43,10 +43,11 @@ import {
   Info as InfoIcon,
   DragIndicator as DragIcon,
   CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon
+  Error as ErrorIcon,
+  Speed as SpeedIcon
 } from '@mui/icons-material';
 import { apiService } from '../services/apiService';
-import PerformanceDashboard from './PerformanceDashboard'
+import PerformanceDashboard from './PerformanceDashboard';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -104,9 +105,11 @@ interface BacktestResults {
   enhanced_analytics?: boolean; // Flag for enhanced vs legacy data
 }
 
-
+// UPDATED PROPS INTERFACE
 interface VisualStrategyBuilderProps {
   availableSymbols: string[];
+  onBacktestComplete?: (results: any) => void;        // NEW
+  onRealtimeStrategyStart?: (strategyId: string) => void; // NEW
 }
 
 // ============================================================================
@@ -372,7 +375,11 @@ const RuleBuilder: React.FC<{
 // MAIN COMPONENT
 // ============================================================================
 
-const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ availableSymbols }) => {
+const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ 
+  availableSymbols, 
+  onBacktestComplete,           // NEW PROP
+  onRealtimeStrategyStart       // NEW PROP
+}) => {
   // State management
   const [strategy, setStrategy] = useState<StrategyConfig>({
     name: 'My Strategy',
@@ -401,6 +408,7 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ available
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [backtesting, setBacktesting] = useState(false);
+  const [deploying, setDeploying] = useState(false); // NEW STATE
   const [notification, setNotification] = useState('');
   const [notificationSeverity, setNotificationSeverity] = useState<'success' | 'error' | 'info' | 'warning'>('info');
   const [results, setResults] = useState<BacktestResults | null>(null);
@@ -410,6 +418,13 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ available
   useEffect(() => {
     loadData();
   }, []);
+
+  // Update selected symbol when available symbols change
+  useEffect(() => {
+    if (availableSymbols.length > 0 && !availableSymbols.includes(selectedSymbol)) {
+      setSelectedSymbol(availableSymbols[0]);
+    }
+  }, [availableSymbols, selectedSymbol]);
 
   const loadData = async () => {
     setLoading(true);
@@ -582,7 +597,7 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ available
         const winRate = performanceMetrics.trading.win_rate;
         const performanceAssessment = performanceReport.summary.strategy_performance;
         
-        setResults({
+        const finalResults = {
           signals: [],
           portfolio: backtestResults.portfolio,
           summary: {
@@ -595,7 +610,15 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ available
           },
           performance_data: backtestResults,
           enhanced_analytics: true
-        });
+        };
+        
+        setResults(finalResults);
+        
+        // NEW: Call the callback to notify parent component
+        if (onBacktestComplete) {
+          console.log('🔄 Notifying App.tsx of backtest completion');
+          onBacktestComplete(backtestResults);
+        }
         
         showNotification(
           `✅ ${performanceAssessment} Strategy! Return: ${totalReturn.toFixed(2)}%, Sharpe: ${sharpeRatio.toFixed(2)}`, 
@@ -605,10 +628,10 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ available
       } else {
         console.log('📊 Legacy response detected');
         
-        // Handle legacy responseß
+        // Handle legacy response
         const portfolio = backtestResults.portfolio || backtestResults;
         
-        setResults({
+        const finalResults = {
           signals: [],
           portfolio: portfolio,
           summary: {
@@ -618,7 +641,15 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ available
             max_drawdown: 0
           },
           enhanced_analytics: false
-        });
+        };
+        
+        setResults(finalResults);
+        
+        // NEW: Call the callback even for legacy results
+        if (onBacktestComplete) {
+          console.log('🔄 Notifying App.tsx of backtest completion (legacy)');
+          onBacktestComplete(backtestResults);
+        }
         
         showNotification(`Backtest completed! Return: ${(portfolio.total_return_percent || 0).toFixed(2)}%`, 'success');
       }
@@ -628,6 +659,72 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ available
       showNotification('Backtest failed: ' + error.message, 'error');
     } finally {
       setBacktesting(false);
+    }
+  };
+
+  // NEW: Deploy real-time strategy function
+// Replace your deployRealtimeStrategy function with this fixed version:
+
+  const deployRealtimeStrategy = async () => {
+    if (strategy.rules.length === 0) {
+      showNotification('Please add at least one rule to deploy real-time strategy', 'error');
+      return;
+    }
+
+    setDeploying(true);
+    try {
+      console.log('🚀 Deploying real-time strategy...');
+      
+      // Build strategy configuration for real-time deployment
+      const realtimePayload = {
+        strategy_name: strategy.name,
+        symbol: selectedSymbol,
+        initial_capital: strategy.position_sizing.value,
+        max_position: strategy.risk_management.max_positions || 1,
+        position_size: Math.floor(strategy.position_sizing.value / 100), // Convert to reasonable position size
+        strategy_type: 'custom_visual_strategy',
+        parameters: {
+          rules: strategy.rules,
+          position_sizing: strategy.position_sizing,
+          risk_management: strategy.risk_management,
+          timeframe: strategy.timeframe || '1d'
+        }
+      };
+
+      console.log('📋 Real-time strategy payload:', realtimePayload);
+
+      // FIX: Use absolute URL to backend port 8000, not relative URL
+      const response = await fetch('http://localhost:8000/api/realtime/start-realtime-strategy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(realtimePayload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to deploy strategy: ${response.status} ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Real-time strategy deployed:', result);
+
+      // Call the callback to notify parent component
+      if (onRealtimeStrategyStart) {
+        console.log('🔄 Notifying App.tsx of real-time strategy start');
+        onRealtimeStrategyStart(result.strategy_id);
+      }
+
+      showNotification(
+        `🔴 Real-time strategy "${strategy.name}" deployed successfully! Strategy ID: ${result.strategy_id}`, 
+        'success'
+      );
+
+    } catch (error: any) {
+      console.error('❌ Real-time deployment failed:', error);
+      showNotification('Real-time deployment failed: ' + error.message, 'error');
+    } finally {
+      setDeploying(false);
     }
   };
 
@@ -680,6 +777,17 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ available
               size="large"
             >
               {backtesting ? 'Running...' : 'Run Backtest'}
+            </Button>
+            {/* NEW: Real-time deployment button */}
+            <Button
+              variant="contained"
+              color="error"
+              startIcon={deploying ? <CircularProgress size={20} /> : <SpeedIcon />}
+              onClick={deployRealtimeStrategy}
+              disabled={deploying || !isStrategyValid}
+              size="large"
+            >
+              {deploying ? 'Deploying...' : 'Deploy Live'}
             </Button>
           </Stack>
         </Box>
@@ -942,6 +1050,20 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ available
               Conditions: {strategy.rules.reduce((sum, rule) => sum + rule.conditions.length, 0)}<br />
               Indicators: {indicators.length} available
             </Typography>
+
+            {/* NEW: Deployment Options */}
+            {isStrategyValid && (
+              <Box mt={2}>
+                <Divider sx={{ my: 1 }} />
+                <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                  🚀 Deployment Options
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  • Run Backtest → View Performance Dashboard<br />
+                  • Deploy Live → Real-time Strategy Monitoring
+                </Typography>
+              </Box>
+            )}
           </Paper>
 
           {/* Results */}
@@ -990,6 +1112,7 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ available
                   </>
                 )}
               </Grid>
+
               {/* Performance Assessment */}
               {results.enhanced_analytics && results.summary.performance_assessment && (
                 <Alert 
@@ -1019,6 +1142,8 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ available
                   />
                 </Box>
               )}
+
+              {/* Legacy Portfolio Display for Compatibility */}
               {(!results.enhanced_analytics || !results.performance_data) && results.portfolio && (
                 <Box>
                   <Typography>
@@ -1026,30 +1151,30 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ available
                   </Typography>
                 </Box>
               )}
-              {/* Legacy Portfolio Display for Compatibility  */}
 
-              {/* {results.portfolio ? (
-                <Stack spacing={2}>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Total Return</Typography>
-                    <Typography variant="h6" color={results.summary.total_return >= 0 ? 'success.main' : 'error.main'}>
-                      {results.summary.total_return.toFixed(2)}%
-                    </Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Total Trades</Typography>
-                    <Typography variant="h6">{results.summary.total_trades}</Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">Final Value</Typography>
-                    <Typography variant="h6">${results.portfolio.total_value?.toFixed(2)}</Typography>
-                  </Box>
-                </Stack>
-              ) : (
-                <Typography variant="body2">
-                  Signals Generated: {results.signals.length}
-                </Typography>
-              )} */}
+              {/* NEW: Next Steps after Results */}
+              {results.enhanced_analytics && (
+                <Box mt={2}>
+                  <Divider sx={{ my: 1 }} />
+                  <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                    🎯 Next Steps
+                  </Typography>
+                  <Stack direction="row" spacing={1}>
+                    <Chip 
+                      label="View Full Analytics" 
+                      size="small" 
+                      color="primary" 
+                      onClick={() => onBacktestComplete && onBacktestComplete(results.performance_data)}
+                    />
+                    <Chip 
+                      label="Deploy Live" 
+                      size="small" 
+                      color="error" 
+                      onClick={deployRealtimeStrategy}
+                    />
+                  </Stack>
+                </Box>
+              )}
             </Paper>
           )}
         </Grid>
