@@ -46,6 +46,7 @@ import {
   Error as ErrorIcon
 } from '@mui/icons-material';
 import { apiService } from '../services/apiService';
+import PerformanceDashboard from './PerformanceDashboard'
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -96,8 +97,13 @@ interface BacktestResults {
     total_trades: number;
     win_rate: number;
     max_drawdown: number;
+    sharpe_ratio?: number;
+    performance_assessment?: string;
   };
+  performance_data?: any; // Complete performance analytics data
+  enhanced_analytics?: boolean; // Flag for enhanced vs legacy data
 }
+
 
 interface VisualStrategyBuilderProps {
   availableSymbols: string[];
@@ -550,79 +556,76 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ available
 
     setBacktesting(true);
     try {
-      console.log('📊 Running backtest...');
-      const portfolio = await apiService.runStrategyBacktest(strategy, selectedSymbol, startDate, endDate);
+      console.log('📊 Running enhanced backtest...');
       
-      // 🔍 DEBUG: Log the complete response structure
-      console.log('✅ Backtest completed - FULL RESPONSE:', portfolio);
-      console.log('📋 Portfolio keys:', Object.keys(portfolio));
-      console.log('💰 Total value:', portfolio.total_value);
-      console.log('💵 Cash:', portfolio.cash);
-      console.log('📈 Trades:', portfolio.trades);
-      console.log('📊 Realized PnL:', portfolio.realized_pnl);
-      console.log('📊 Unrealized PnL:', portfolio.unrealized_pnl);
-      console.log('📊 Total return percent:', portfolio.total_return_percent);
+      const backtestResults = await apiService.runStrategyBacktest(
+        strategy, 
+        selectedSymbol, 
+        startDate, 
+        endDate,
+        100000
+      );
       
-      // 🔍 DEBUG: Check different return calculation methods
-      const method1 = portfolio.total_return_percent;
-      const method2 = ((portfolio.total_value - 100000) / 100000 * 100);
-      const method3 = (portfolio.realized_pnl / 100000 * 100);
+      console.log('✅ Backtest completed:', backtestResults);
       
-      console.log('🧮 Return calculations:');
-      console.log('  Method 1 (total_return_percent):', method1);
-      console.log('  Method 2 (total_value based):', method2);
-      console.log('  Method 3 (realized_pnl based):', method3);
-      
-      // Use the best available return calculation
-      let totalReturn = 0;
-      if (method1 !== undefined && method1 !== null && !isNaN(method1)) {
-        totalReturn = method1;
-        console.log('✅ Using total_return_percent:', totalReturn);
-      } else if (portfolio.total_value && !isNaN(portfolio.total_value)) {
-        totalReturn = method2;
-        console.log('✅ Using total_value calculation:', totalReturn);
-      } else if (portfolio.realized_pnl && !isNaN(portfolio.realized_pnl)) {
-        totalReturn = method3;
-        console.log('✅ Using realized_pnl calculation:', totalReturn);
-      } else {
-        console.log('❌ Could not calculate return - using 0');
-      }
-      
-      // 🔍 DEBUG: Check trade details
-      if (portfolio.trades && portfolio.trades.length > 0) {
-        console.log('📊 Trade Analysis:');
-        portfolio.trades.forEach((trade: any, index: number) => {
-          console.log(`  Trade ${index + 1}:`, {
-            entry_price: trade.entry_price,
-            exit_price: trade.exit_price,
-            quantity: trade.quantity,
-            pnl: trade.pnl,
-            pnl_percent: trade.pnl_percent
-          });
+      // Handle enhanced response
+      if (backtestResults.performance_metrics && backtestResults.performance_report) {
+        console.log('📊 Enhanced analytics detected');
+        
+        const performanceMetrics = backtestResults.performance_metrics;
+        const performanceReport = backtestResults.performance_report;
+        
+        const totalReturn = performanceMetrics.returns.total_return_percent;
+        const sharpeRatio = performanceMetrics.risk_adjusted.sharpe_ratio;
+        const maxDrawdown = performanceMetrics.risk.max_drawdown;
+        const totalTrades = performanceMetrics.trading.total_trades;
+        const winRate = performanceMetrics.trading.win_rate;
+        const performanceAssessment = performanceReport.summary.strategy_performance;
+        
+        setResults({
+          signals: [],
+          portfolio: backtestResults.portfolio,
+          summary: {
+            total_return: totalReturn,
+            total_trades: totalTrades,
+            win_rate: winRate,
+            max_drawdown: maxDrawdown,
+            sharpe_ratio: sharpeRatio,
+            performance_assessment: performanceAssessment
+          },
+          performance_data: backtestResults,
+          enhanced_analytics: true
         });
         
-        const totalTradesPnL = portfolio.trades.reduce((sum: number, trade: any) => sum + (trade.pnl || 0), 0);
-        console.log('📊 Total trades P&L:', totalTradesPnL);
+        showNotification(
+          `✅ ${performanceAssessment} Strategy! Return: ${totalReturn.toFixed(2)}%, Sharpe: ${sharpeRatio.toFixed(2)}`, 
+          performanceAssessment === 'Excellent' ? 'success' : 'info'
+        );
+        
       } else {
-        console.log('⚠️ No trades found - strategy might not have generated signals or trades');
+        console.log('📊 Legacy response detected');
+        
+        // Handle legacy responseß
+        const portfolio = backtestResults.portfolio || backtestResults;
+        
+        setResults({
+          signals: [],
+          portfolio: portfolio,
+          summary: {
+            total_return: portfolio.total_return_percent || 0,
+            total_trades: portfolio.trades?.length || 0,
+            win_rate: 0,
+            max_drawdown: 0
+          },
+          enhanced_analytics: false
+        });
+        
+        showNotification(`Backtest completed! Return: ${(portfolio.total_return_percent || 0).toFixed(2)}%`, 'success');
       }
       
-      setResults({
-        signals: [],
-        portfolio,
-        summary: {
-          total_return: totalReturn,
-          total_trades: portfolio.trades?.length || 0,
-          win_rate: portfolio.trades?.length > 0 ? 
-            (portfolio.trades.filter((t: any) => (t.pnl || 0) > 0).length / portfolio.trades.length * 100) : 0,
-          max_drawdown: 0 // Would need to calculate from trades
-        }
-      });
-      
-      showNotification(`Backtest completed! Total return: ${totalReturn.toFixed(2)}%`, 'success');
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Backtest failed:', error);
-      showNotification('Backtest failed: ' + error, 'error');
+      showNotification('Backtest failed: ' + error.message, 'error');
     } finally {
       setBacktesting(false);
     }
@@ -945,10 +948,87 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ available
           {results && (
             <Paper sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom fontWeight="bold">
-                Results
+                {results.enhanced_analytics ? '📊 Enhanced Backtest Results' : 'Basic Backtest Results'}
               </Typography>
               
-              {results.portfolio ? (
+              {/* Enhanced Quick Summary Cards */}
+              <Grid container spacing={2} mb={3}>
+                <Grid item xs={6} md={3}>
+                  <Box textAlign="center" p={2} bgcolor="primary.50" borderRadius={1}>
+                    <Typography variant="h6" color="primary.main" fontWeight="bold">
+                      {results.summary.total_return.toFixed(2)}%
+                    </Typography>
+                    <Typography variant="caption">Total Return</Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={6} md={3}>
+                  <Box textAlign="center" p={2} bgcolor="success.50" borderRadius={1}>
+                    <Typography variant="h6" color="success.main" fontWeight="bold">
+                      {results.summary.total_trades}
+                    </Typography>
+                    <Typography variant="caption">Total Trades</Typography>
+                  </Box>
+                </Grid>
+                {results.enhanced_analytics && (
+                  <>
+                  <Grid item xs={6} md={3}>
+                    <Box textAlign="center" p={2} bgcolor="info.50" borderRadius={1}>
+                      <Typography variant="h6" color="info.main" fontWeight="bold">
+                        {results.summary.sharpe_ratio?.toFixed(2) || 'N/A'}
+                      </Typography>
+                      <Typography variant="caption">Sharpe Ratio</Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={6} md={3}>
+                    <Box textAlign="center" p={2} bgcolor="warning.50" borderRadius={1}>
+                      <Typography variant="h6" color="warning.main" fontWeight="bold">
+                        {results.summary.max_drawdown?.toFixed(2) || 'N/A'}%
+                      </Typography>
+                      <Typography variant="caption">Max Drawdown</Typography>
+                    </Box>
+                  </Grid>
+                  </>
+                )}
+              </Grid>
+              {/* Performance Assessment */}
+              {results.enhanced_analytics && results.summary.performance_assessment && (
+                <Alert 
+                  severity={
+                    results.summary.performance_assessment === 'Excellent' ? 'success' :
+                    results.summary.performance_assessment === 'Good' ? 'info' :
+                    results.summary.performance_assessment === 'Average' ? 'warning' : 'error'
+                  } 
+                  sx={{ mb: 2 }}
+                >
+                  <Typography variant="subtitle1" fontWeight="bold">
+                    Strategy Assessment: {results.summary.performance_assessment}
+                  </Typography>
+                </Alert>
+              )}
+
+              {/* Enhanced Performance Dashboard */}
+              {results.performance_data && results.enhanced_analytics && (
+                <Box>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="subtitle1" gutterBottom fontWeight="bold">
+                    📊 Comprehensive Performance Analysis
+                  </Typography>
+                  <PerformanceDashboard 
+                    results={results.performance_data} 
+                    loading={backtesting}
+                  />
+                </Box>
+              )}
+              {(!results.enhanced_analytics || !results.performance_data) && results.portfolio && (
+                <Box>
+                  <Typography>
+                    Realized P&L: ${results.portfolio.realized_pnl?.toFixed(2)}
+                  </Typography>
+                </Box>
+              )}
+              {/* Legacy Portfolio Display for Compatibility  */}
+
+              {/* {results.portfolio ? (
                 <Stack spacing={2}>
                   <Box>
                     <Typography variant="body2" color="text.secondary">Total Return</Typography>
@@ -969,7 +1049,7 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({ available
                 <Typography variant="body2">
                   Signals Generated: {results.signals.length}
                 </Typography>
-              )}
+              )} */}
             </Paper>
           )}
         </Grid>

@@ -440,32 +440,178 @@ class ApiService {
     }
   }
 
-  // Run full strategy backtest
+  // Run full strategy backtest (original method for backward compatibility)
+  // Replace the existing runStrategyBacktest method with this:
   async runStrategyBacktest(
     strategy: StrategyConfig,
     symbol: string,
     startDate: string,
-    endDate: string
-  ): Promise<StrategyPortfolio> {
-    console.log('🚀 Running backtest for:', strategy.name);
-
+    endDate: string,
+    initialCapital: number = 100000
+  ): Promise<any> {
     try {
-      // Send strategy as body, other params as query parameters
-      const response = await this.client.post('/api/strategy/backtest', strategy, {
-        params: {
-          symbol: symbol,
-          start_date: startDate,
-          end_date: endDate
-        }
+      console.log('🚀 Running enhanced backtest with comprehensive analytics');
+      console.log('📊 Request details:', {
+        strategy: strategy.name,
+        symbol,
+        startDate,
+        endDate,
+        initialCapital
       });
-      return response.data;
+
+      const response = await this.client.post('/api/strategy/backtest', {
+        ...strategy,
+        symbol,
+        start_date: startDate,
+        end_date: endDate,
+        initial_capital: initialCapital
+      });
+
+      const data = response.data;
+      
+      console.log('✅ Enhanced backtest completed successfully');
+      
+      // Handle both enhanced and legacy responses
+      if (data.performance_metrics && data.performance_report) {
+        console.log('📈 Performance metrics found:', data.performance_metrics);
+        console.log('📊 Performance report found:', data.performance_report);
+        
+        // Validate response structure
+        this.validateBacktestResponse(data);
+        return data; // Return enhanced response
+      } else {
+        console.warn('⚠️ Legacy response format detected');
+        // Return legacy format wrapped in enhanced structure
+        return {
+          portfolio: data,
+          performance_metrics: null,
+          performance_report: null,
+          strategy: { name: strategy.name, description: strategy.description, timeframe: strategy.timeframe },
+          backtest_config: { symbol, start_date: startDate, end_date: endDate, initial_capital: initialCapital }
+        };
+      }
     } catch (error: any) {
-      console.error('❌ Backtest failed:');
-      console.error('  - Status:', error.response?.status);
-      console.error('  - Error Details:', error.response?.data);
-      console.error('  - Full Error:', error);
+      console.error('❌ Enhanced backtest failed:', error);
       throw error;
     }
+  }
+
+  /**
+   * Run comprehensive strategy backtest with enhanced performance analytics
+   */
+  async runEnhancedStrategyBacktest(
+    strategy: StrategyConfig,
+    symbol: string,
+    startDate: string,
+    endDate: string,
+    initialCapital: number = 100000
+  ): Promise<any> {
+    try {
+      console.log('🚀 Running enhanced backtest with comprehensive analytics');
+      console.log('📊 Request details:', {
+        strategy: strategy.name,
+        symbol,
+        startDate,
+        endDate,
+        initialCapital
+      });
+
+      const response = await this.client.post('/api/strategy/backtest', {
+        ...strategy,
+        symbol,
+        start_date: startDate,
+        end_date: endDate,
+        initial_capital: initialCapital
+      });
+
+      const data = response.data;
+      
+      console.log('✅ Enhanced backtest completed successfully');
+      console.log('📈 Performance metrics:', data.performance_metrics);
+      console.log('📊 Key results:', {
+        total_return: data.performance_metrics?.returns?.total_return_percent,
+        sharpe_ratio: data.performance_metrics?.risk_adjusted?.sharpe_ratio,
+        max_drawdown: data.performance_metrics?.risk?.max_drawdown,
+        total_trades: data.performance_metrics?.trading?.total_trades,
+        win_rate: data.performance_metrics?.trading?.win_rate,
+        performance_assessment: data.performance_report?.summary?.strategy_performance
+      });
+
+      // Validate data structure
+      if (!data.performance_metrics) {
+        console.warn('⚠️ Missing performance_metrics in response');
+      }
+      if (!data.performance_report) {
+        console.warn('⚠️ Missing performance_report in response');
+      }
+
+      // Validate response structure
+      this.validateBacktestResponse(data);
+
+      return data;
+    } catch (error: any) {
+      console.error('❌ Enhanced backtest failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Enhanced error handling for performance-related endpoints
+   */
+  async handlePerformanceApiCall(endpoint: string, options: any = {}): Promise<any> {
+    try {
+      const response = await this.client.request({
+        url: endpoint,
+        headers: {
+          'Content-Type': 'application/json',
+          ...options.headers
+        },
+        ...options
+      });
+
+      return response.data;
+    } catch (error: any) {
+      console.error(`❌ Performance API call failed for ${endpoint}:`, error);
+      const errorData = error.response?.data || {};
+      throw new Error(errorData.detail || `API call failed: ${error.response?.status || 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Validate backtest response structure
+   */
+  validateBacktestResponse(data: any): boolean {
+    const requiredFields = [
+      'strategy',
+      'backtest_config', 
+      'portfolio',
+      'performance_metrics',
+      'performance_report'
+    ];
+
+    const missing: string[] = [];
+    for (const field of requiredFields) {
+      if (!data[field]) {
+        missing.push(field);
+      }
+    }
+
+    if (missing.length > 0) {
+      console.warn('⚠️ Missing required fields in backtest response:', missing);
+      return false;
+    }
+
+    // Validate performance_metrics structure
+    const metricsRequired = ['returns', 'risk', 'risk_adjusted', 'trading', 'additional'];
+    for (const field of metricsRequired) {
+      if (!data.performance_metrics[field]) {
+        console.warn(`⚠️ Missing performance_metrics.${field}`);
+        return false;
+      }
+    }
+
+    console.log('✅ Backtest response structure is valid');
+    return true;
   }
 
   // Check strategy engine health
