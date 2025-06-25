@@ -1,4 +1,4 @@
-// frontend/src/App.tsx
+// src/App.tsx - Updated for Phase 3: Visual Strategy Builder
 import React, { useState, useEffect } from 'react';
 import {
   ThemeProvider,
@@ -23,17 +23,20 @@ import {
   CloudUpload,
   Download,
   Assessment,
-  ShowChart
+  ShowChart,
+  Psychology as PsychologyIcon,
+  AutoGraph as AutoGraphIcon
 } from '@mui/icons-material';
 
 // Import existing components
 import ConnectionStatus from './components/ConnectionStatus';
 import MarketData from './components/MarketData';
-
-// Import new Phase 2 components
 import CsvUpload from './components/CsvUpload';
 import BulkDownload from './components/BulkDownload';
 import DataQuality from './components/DataQuality';
+
+// Import NEW Visual Strategy Builder
+import VisualStrategyBuilder from './components/VisualStrategyBuilder';
 
 // Import API service
 import { apiService } from './services/apiService';
@@ -65,7 +68,7 @@ function App() {
   const [apiConnected, setApiConnected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [currentTab, setCurrentTab] = useState(0);
+  const [currentTab, setCurrentTab] = useState(4); // Default to Strategy Builder
   const [availableSymbols, setAvailableSymbols] = useState<string[]>([]);
 
   // Create theme
@@ -98,7 +101,7 @@ function App() {
       await apiService.testConnection();
       setApiConnected(true);
       
-      // UPDATED: Always use extended symbol list for comprehensive testing
+      // Extended symbol list for comprehensive testing
       const EXTENDED_SYMBOLS = [
         // Major Stocks
         'AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'META', 'NVDA',
@@ -120,7 +123,7 @@ function App() {
       setError(error instanceof Error ? error.message : 'Connection failed');
       console.error('❌ API Connection failed:', error);
       
-      // UPDATED: Set fallback symbols even on connection failure
+      // Set fallback symbols even on connection failure
       const FALLBACK_SYMBOLS = [
         'AAPL', 'GOOGL', 'MSFT', 'TSLA', 'AMZN', 'META',
         'BTC-USD', 'ETH-USD', 'ADA-USD', 'SOL-USD', 'DOGE-USD'
@@ -167,10 +170,10 @@ function App() {
         <Toolbar>
           <TrendingUp sx={{ mr: 2 }} />
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            Backtesting Platform - Phase 2
+            Backtesting Platform - Phase 3
           </Typography>
           <Typography variant="body2" sx={{ mr: 2, opacity: 0.8 }}>
-            Advanced Data Management
+            Visual Strategy Builder & Analytics
           </Typography>
           
           <Tooltip title="Toggle dark mode">
@@ -196,7 +199,7 @@ function App() {
           onRefresh={testConnection}
         />
 
-        {/* Phase 2 Feature Announcement */}
+        {/* Phase 3 Feature Announcement */}
         <Paper 
           elevation={3} 
           sx={{ 
@@ -207,23 +210,23 @@ function App() {
           }}
         >
           <Typography variant="h5" gutterBottom align="center">
-            🚀 Phase 2: Advanced Data Management
+            🚀 Phase 3: Visual Strategy Builder
           </Typography>
           <Typography variant="body1" align="center" sx={{ mb: 2 }}>
-            New features: CSV Upload • Bulk Downloads • Data Quality Analysis • Multiple Sources
+            New features: Visual Drag & Drop Strategy Builder • Technical Indicators • Real Backtesting • Performance Analytics
           </Typography>
           <Box display="flex" justifyContent="center" gap={2}>
             <Box display="flex" alignItems="center">
-              <CloudUpload sx={{ mr: 1 }} />
-              <Typography variant="body2">CSV Upload</Typography>
+              <PsychologyIcon sx={{ mr: 1 }} />
+              <Typography variant="body2">Visual Builder</Typography>
             </Box>
             <Box display="flex" alignItems="center">
-              <Download sx={{ mr: 1 }} />
-              <Typography variant="body2">Bulk Downloads</Typography>
+              <AutoGraphIcon sx={{ mr: 1 }} />
+              <Typography variant="body2">Live Backtesting</Typography>
             </Box>
             <Box display="flex" alignItems="center">
               <Assessment sx={{ mr: 1 }} />
-              <Typography variant="body2">Quality Analysis</Typography>
+              <Typography variant="body2">Performance Analytics</Typography>
             </Box>
           </Box>
         </Paper>
@@ -233,7 +236,8 @@ function App() {
           <Tabs 
             value={currentTab} 
             onChange={handleTabChange}
-            variant="fullWidth"
+            variant="scrollable"
+            scrollButtons="auto"
             indicatorColor="primary"
             textColor="primary"
           >
@@ -260,6 +264,12 @@ function App() {
               label="Data Quality" 
               id="tab-3"
               aria-controls="tabpanel-3"
+            />
+            <Tab 
+              icon={<PsychologyIcon />} 
+              label="Strategy Builder" 
+              id="tab-4"
+              aria-controls="tabpanel-4"
             />
           </Tabs>
         </Paper>
@@ -305,6 +315,19 @@ function App() {
           )}
         </TabPanel>
 
+        {/* NEW Visual Strategy Builder Tab */}
+        <TabPanel value={currentTab} index={4}>
+          {apiConnected ? (
+            <VisualStrategyBuilder availableSymbols={availableSymbols} />
+          ) : (
+            <Paper sx={{ p: 3, textAlign: 'center' }}>
+              <Alert severity="warning">
+                Please connect to the API to use visual strategy builder
+              </Alert>
+            </Paper>
+          )}
+        </TabPanel>
+
         {/* Symbol Info */}
         {availableSymbols.length > 0 && (
           <Alert severity="success" sx={{ mb: 3 }}>
@@ -321,37 +344,37 @@ function App() {
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 2 }}>
             <Box>
               <Typography variant="subtitle2" color="success.main" gutterBottom>
-                ✅ Phase 1: Foundation Complete
+                ✅ Phase 1-2: Data Foundation Complete
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 • Backend API with FastAPI<br />
-                • Basic market data loading<br />
-                • React frontend with TypeScript<br />
-                • Real-time WebSocket communication
+                • Market data loading & CSV upload<br />
+                • Data quality analysis<br />
+                • Bulk download operations
               </Typography>
             </Box>
             
             <Box>
               <Typography variant="subtitle2" color="success.main" gutterBottom>
-                ✅ Phase 2: Advanced Data Management Complete
+                ✅ Phase 3: Visual Strategy Builder Complete
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                • CSV file upload and processing<br />
-                • Bulk data download operations<br />
-                • Data quality analysis and reporting<br />
-                • Multiple data source support
+                • Visual drag & drop interface<br />
+                • Technical indicators (RSI, SMA, MACD, etc.)<br />
+                • Real-time strategy testing<br />
+                • Complete backtesting engine
               </Typography>
             </Box>
             
             <Box>
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                ⏳ Phase 3: Strategy Engine (Next)
+                ⏳ Phase 4: Performance Dashboard (Next)
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                • Technical indicators (EMA, RSI, MACD)<br />
-                • Strategy modeling and validation<br />
-                • Advanced backtesting engine<br />
-                • Performance analytics
+                • Interactive performance charts<br />
+                • Advanced analytics dashboard<br />
+                • Risk metrics visualization<br />
+                • Strategy comparison tools
               </Typography>
             </Box>
           </Box>
@@ -360,13 +383,13 @@ function App() {
         {/* Footer */}
         <Box sx={{ mt: 6, py: 3, textAlign: 'center' }}>
           <Typography variant="h6" gutterBottom>
-            🎉 Phase 2: Advanced Data Management Complete!
+            🎉 Phase 3: Visual Strategy Builder Complete!
           </Typography>
           <Typography variant="body2" color="text.secondary" gutterBottom>
-            ✅ CSV Upload • ✅ Bulk Downloads • ✅ Quality Analysis • ✅ Multiple Sources
+            ✅ Visual Builder • ✅ Technical Indicators • ✅ Real Backtesting • ✅ Strategy Examples
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            Backend: FastAPI + Enhanced Data Service • Frontend: React + TypeScript + Material-UI
+            Backend: Strategy Engine + Technical Indicators • Frontend: React + TypeScript + Drag & Drop UI
           </Typography>
         </Box>
       </Container>

@@ -112,3 +112,4 @@ class Portfolio(BaseModel):
     total_value: float = 100000.0
     unrealized_pnl: float = 0.0
     realized_pnl: float = 0.0
+    total_return_percent: float = 0.0

@@ -91,6 +91,79 @@ export interface BacktestResult {
   message: string;
 }
 
+export interface StrategyCondition {
+  indicator: string;
+  parameters: Record<string, any>;
+  operator: string;
+  value: number | string | Record<string, any>;
+}
+
+export interface StrategyRule {
+  name: string;
+  signal_type: 'buy' | 'sell';
+  conditions: StrategyCondition[];
+  logical_operator?: 'and' | 'or';
+}
+
+export interface StrategyConfig {
+  name: string;
+  description: string;
+  timeframe?: string;
+  rules: StrategyRule[];
+  position_sizing: {
+    method: string;
+    value: number;
+  };
+  risk_management: {
+    stop_loss_percent?: number;
+    take_profit_percent?: number;
+    max_positions?: number;
+  };
+  symbols?: string[];
+}
+
+export interface StrategySignal {
+  timestamp: string;
+  signal_type: 'buy' | 'sell';
+  price: number;
+  rule_name: string;
+  confidence: number;
+}
+
+export interface StrategyTrade {
+  entry_time: string;
+  exit_time: string;
+  entry_price: number;
+  exit_price: number;
+  quantity: number;
+  pnl: number;
+  trade_type: 'long' | 'short';
+  exit_reason: string;
+}
+
+export interface StrategyPortfolio {
+  total_value: number;
+  cash: number;
+  positions: any[];
+  trades: StrategyTrade[];
+  realized_pnl: number;
+  unrealized_pnl: number;
+  total_return_percent: number;
+}
+
+export interface IndicatorInfo {
+  name: string;
+  description: string;
+  parameters: Record<string, string>;
+}
+
+export interface StrategyHealthResponse {
+  status: string;
+  message: string;
+  indicators_available: boolean;
+  data_source: string;
+}
+
 class ApiService {
   private client: AxiosInstance;
 
@@ -308,6 +381,97 @@ class ApiService {
     if (score >= 0.7) return '#ff9800'; // orange
     if (score >= 0.5) return '#f44336'; // red
     return '#9e9e9e'; // grey
+  }
+
+  // Get available indicators for strategy building
+  async getAvailableIndicators(): Promise<{ indicators: IndicatorInfo[]; operators: string[] }> {
+    const response = await this.client.get('/api/strategy/indicators');
+    return response.data;
+  }
+
+  // Get example strategies
+  async getStrategyExamples(): Promise<{ examples: Record<string, StrategyConfig> }> {
+    const response = await this.client.get('/api/strategy/examples');
+    return response.data;
+  }
+
+  // Test strategy signals (no trading simulation)
+  async testStrategy(
+    strategy: StrategyConfig,
+    symbol: string,
+    startDate: string,
+    endDate: string
+  ): Promise<StrategySignal[]> {
+    console.log('🚀 Testing strategy:', strategy.name);
+    console.log('📊 Request details:');
+    console.log('  - Strategy:', JSON.stringify(strategy, null, 2));
+    console.log('  - Symbol:', symbol);
+    console.log('  - Start Date:', startDate);
+    console.log('  - End Date:', endDate);
+
+    try {
+      // Send strategy as body, other params as query parameters
+      const response = await this.client.post('/api/strategy/test', strategy, {
+        params: {
+          symbol: symbol,
+          start_date: startDate,
+          end_date: endDate
+        }
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Strategy test failed:');
+      console.error('  - Status:', error.response?.status);
+      console.error('  - Error Details:', error.response?.data);
+      
+      // Show detailed validation errors
+      if (error.response?.data?.detail && Array.isArray(error.response.data.detail)) {
+        console.error('🔍 DETAILED VALIDATION ERRORS:');
+        error.response.data.detail.forEach((err: any, index: number) => {
+          console.error(`   ${index + 1}. Field: ${err.loc?.join('.') || 'unknown'}`);
+          console.error(`      Error: ${err.msg || err.type}`);
+          console.error(`      Type: ${err.type}`);
+          console.error(`      Input: ${JSON.stringify(err.input)}`);
+        });
+      }
+      
+      console.error('  - Full Error:', error);
+      throw error;
+    }
+  }
+
+  // Run full strategy backtest
+  async runStrategyBacktest(
+    strategy: StrategyConfig,
+    symbol: string,
+    startDate: string,
+    endDate: string
+  ): Promise<StrategyPortfolio> {
+    console.log('🚀 Running backtest for:', strategy.name);
+
+    try {
+      // Send strategy as body, other params as query parameters
+      const response = await this.client.post('/api/strategy/backtest', strategy, {
+        params: {
+          symbol: symbol,
+          start_date: startDate,
+          end_date: endDate
+        }
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Backtest failed:');
+      console.error('  - Status:', error.response?.status);
+      console.error('  - Error Details:', error.response?.data);
+      console.error('  - Full Error:', error);
+      throw error;
+    }
+  }
+
+  // Check strategy engine health
+  async checkStrategyHealth(): Promise<StrategyHealthResponse> {
+    const response = await this.client.get('/api/strategy/health');
+    return response.data;
   }
 }
 
