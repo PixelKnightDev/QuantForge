@@ -162,6 +162,9 @@ async def run_strategy_backtest(request: BacktestRequest):
                     "positions": [],
                     "trades": []
                 },
+                # ADD EMPTY ARRAYS FOR CHARTS WHEN NO TRADES
+                "portfolio_values": [initial_capital],
+                "portfolio_dates": [start_date],
                 "performance_report": {
                     "summary": {
                         "strategy_performance": "No trades executed",
@@ -184,6 +187,28 @@ async def run_strategy_backtest(request: BacktestRequest):
             end_date=end_date,
             benchmark_symbol="SPY"
         )
+        
+        # GENERATE PORTFOLIO TIME SERIES DATA (BEFORE USING IT)
+        logger.info("📊 Generating portfolio time series for advanced visualizations")
+        
+        # Create portfolio value progression over time
+        portfolio_values = [initial_capital]  # Start with initial capital
+        portfolio_dates = [start_date]  # Start with backtest start date
+        
+        # Sort trades by exit time to create chronological progression
+        sorted_trades = sorted(portfolio.trades, key=lambda t: t.exit_timestamp)
+        
+        current_value = initial_capital
+        for trade in sorted_trades:
+            current_value += trade.pnl  # Add P&L from each trade
+            portfolio_values.append(current_value)
+            portfolio_dates.append(trade.exit_timestamp.isoformat())
+        
+        # Add final portfolio value at end date
+        portfolio_values.append(portfolio.total_value)
+        portfolio_dates.append(end_date)
+        
+        logger.info(f"📈 Generated {len(portfolio_values)} portfolio value points over time")
         
         # Convert portfolio to dict for response
         portfolio_dict = {
@@ -216,12 +241,14 @@ async def run_strategy_backtest(request: BacktestRequest):
                     "pnl": trade.pnl,
                     "pnl_percent": trade.pnl_percent,
                     "rule_name": trade.rule_name,
-                    "exit_reason": trade.exit_reason
+                    "exit_reason": trade.exit_reason,
+                    # ADD DURATION CALCULATION
+                    "duration_hours": (trade.exit_timestamp - trade.entry_timestamp).total_seconds() / 3600
                 }
                 for trade in portfolio.trades
             ]
         }
-        
+
         # Convert performance report to dict
         performance_dict = {
             "strategy_name": performance_report.strategy_name,
@@ -299,6 +326,11 @@ async def run_strategy_backtest(request: BacktestRequest):
                 "data_points": len(performance_report.performance_series) if performance_report.performance_series else 0
             },
             "portfolio": portfolio_dict,
+            
+            # ADD PORTFOLIO TIME SERIES DATA HERE (NOW DEFINED ABOVE)
+            "portfolio_values": portfolio_values,
+            "portfolio_dates": portfolio_dates,
+
             "performance_metrics": {
                 "returns": {
                     "total_return_percent": metrics.total_return,
@@ -308,9 +340,13 @@ async def run_strategy_backtest(request: BacktestRequest):
                 },
                 "risk": {
                     "volatility": risk_analysis.annualized_volatility,
+                    # ADD these fields for chart compatibility:
+                    "volatility_pct": risk_analysis.annualized_volatility,
                     "max_drawdown": metrics.max_drawdown,
+                    "max_drawdown_pct": metrics.max_drawdown,
                     "max_drawdown_dollar": (metrics.max_drawdown / 100) * initial_capital,
                     "var_95": metrics.var_95,
+                    "var_95_pct": metrics.var_95,
                     "var_99": risk_analysis.var_99
                 },
                 "risk_adjusted": {
@@ -329,8 +365,8 @@ async def run_strategy_backtest(request: BacktestRequest):
                     # Keep existing fields for backward compatibility
                     "profit_factor": metrics.profit_factor,
                     "expectancy": metrics.expectancy,
-                    "best_trade": metrics.best_trade,  # Keep for legacy support
-                    "worst_trade": metrics.worst_trade,  # Keep for legacy support
+                    "best_trade": metrics.best_trade,
+                    "worst_trade": metrics.worst_trade,
                     "avg_win": metrics.avg_win,
                     "avg_loss": metrics.avg_loss
                 },
@@ -380,7 +416,7 @@ async def run_strategy_backtest(request: BacktestRequest):
     except Exception as e:
         logger.error(f"❌ Enhanced backtest failed: {e}")
         raise HTTPException(status_code=500, detail=f"Backtest failed: {str(e)}")
-    
+
 # ADD a new test endpoint to your router to verify the enhanced metrics:
 @router.get("/test-enhanced-trading-metrics")
 async def test_enhanced_trading_metrics():

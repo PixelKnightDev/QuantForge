@@ -47,6 +47,15 @@ import {
 
 import { apiService, EnhancedTradingMetrics } from '../services/apiService';
 
+import {
+  ReturnDistributionHeatmap,
+  DrawdownAnalysisChart,
+  PnLDistributionChart,
+  TradeDurationAnalysisChart,
+  RiskMetricVisualizations,
+  ComprehensiveVisualizationDashboard
+} from './AdvancedVisualizations';
+
 // ============================================================================
 // REAL-TIME INTERFACES
 // ============================================================================
@@ -534,7 +543,13 @@ const EnhancedPerformanceDashboard: React.FC<EnhancedPerformanceDashboardProps> 
   const [connectionStatus, setConnectionStatus] = useState<boolean>(false);
   const [isLiveMode, setIsLiveMode] = useState<boolean>(enableRealTime);
   const [strategyStatus, setStrategyStatus] = useState<'active' | 'stopped' | 'paused'>('stopped');
+  
+  // Extract enhanced metrics
   const enhancedTradingMetrics = extractEnhancedTradingMetrics(results);
+  
+  // State for Advanced Visualizations
+  const [showAdvancedCharts, setShowAdvancedCharts] = useState<boolean>(false);
+
 
   // WebSocket connection and handlers
   useEffect(() => {
@@ -766,6 +781,39 @@ const EnhancedPerformanceDashboard: React.FC<EnhancedPerformanceDashboardProps> 
           metrics={enhancedTradingMetrics}
           isLive={showLiveMetrics}
         />
+      )}
+
+      {/* Advanced Visualizations Toggle */}
+      {results && results.portfolio && (
+        <Paper elevation={2} sx={{ p: 2, mb: 3, bgcolor: 'info.50' }}>
+          <Box display="flex" justifyContent="space-between" alignItems="center">
+            <Box>
+              <Typography variant="h6" fontWeight="bold" color="info.main">
+                📊 Advanced Performance Visualizations
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Deep dive into trading patterns, drawdowns, risk metrics and more
+              </Typography>
+            </Box>
+            <Box>
+              <Chip
+                label={showAdvancedCharts ? "Hide Charts" : "Show Advanced Charts"}
+                onClick={() => setShowAdvancedCharts(!showAdvancedCharts)}
+                color="info"
+                variant={showAdvancedCharts ? "filled" : "outlined"}
+                sx={{ cursor: 'pointer' }}
+                icon={<Timeline />}
+              />
+            </Box>
+          </Box>
+        </Paper>
+      )}
+
+      {/* Advanced Visualizations Section */}
+      {showAdvancedCharts && results && results.portfolio && (
+        <Box sx={{ mb: 3 }}>
+          <ComprehensiveVisualizationDashboard results={results} />
+        </Box>
       )}
 
       {/* Original Performance Dashboard */}
