@@ -1,4 +1,4 @@
-// src/components/EnhancedPerformanceDashboard.tsx
+
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,

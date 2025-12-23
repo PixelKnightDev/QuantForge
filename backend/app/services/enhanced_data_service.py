@@ -44,7 +44,7 @@ class RealDataQualityAnalyzer:
         df['rolling_std'] = df['price'].rolling(window=window, min_periods=5).std()
         
         for i, point in enumerate(data):
-            if i < 5:  # Skip first few points
+            if i < 5: 
                 continue
                 
             rolling_mean = df.iloc[i]['rolling_mean']
@@ -53,7 +53,6 @@ class RealDataQualityAnalyzer:
             if pd.isna(rolling_mean) or pd.isna(rolling_std) or rolling_std == 0:
                 continue
             
-            # Z-score based anomaly detection
             z_score = abs((point.close - rolling_mean) / rolling_std)
             
             if z_score > threshold:
@@ -86,8 +85,7 @@ class RealDataQualityAnalyzer:
         for point in data:
             if point.volume <= 0:
                 continue
-                
-            # IQR-based outlier detection
+
             if point.volume > q75 + threshold * iqr:
                 ratio = point.volume / median_volume if median_volume > 0 else 0
                 anomalies.append({
@@ -106,7 +104,7 @@ class RealDataQualityAnalyzer:
         invalid_sequences = []
         
         for point in data:
-            # Basic OHLC validation: Low ≤ Open,Close ≤ High
+
             if not (point.low <= point.open <= point.high and 
                    point.low <= point.close <= point.high):
                 invalid_sequences.append({
@@ -265,8 +263,6 @@ class DataCache:
         except Exception as e:
             logger.error(f"Cache cleanup error: {e}")
 
-# Add this to your enhanced_data_service.py before the EnhancedDataService class
-
 class SymbolMapper:
     """Handle symbol format conversion for different exchanges and assets"""
     
@@ -362,7 +358,7 @@ async def _download_yahoo_finance_WITH_MAPPING(self, symbol: str, period: str, i
                         period=try_period, 
                         interval=interval, 
                         auto_adjust=True,
-                        actions=False  # Exclude dividends/splits for cleaner data
+                        actions=False  
                     )
                     
                     if not df.empty and len(df) > 1:
@@ -406,7 +402,7 @@ async def _download_yahoo_finance_WITH_MAPPING(self, symbol: str, period: str, i
                     low=float(row['Low']),
                     close=float(row['Close']),
                     volume=float(row['Volume']) if not pd.isna(row['Volume']) else 0.0,
-                    symbol=symbol,  # Use original symbol
+                    symbol=symbol, 
                     source=DataSource.YAHOO_FINANCE,
                     interval=interval,
                     confidence_score=1.0,
@@ -424,8 +420,6 @@ async def _download_yahoo_finance_WITH_MAPPING(self, symbol: str, period: str, i
         if not enhanced_data:
             logger.error(f"No valid data points after conversion for {symbol}")
             return []
-        
-        # Calculate enhanced fields
         enhanced_data = await self._calculate_enhanced_fields(enhanced_data)
         
         logger.info(f"✅ Successfully loaded {len(enhanced_data)} records for {symbol} (as {normalized_symbol})")
@@ -445,10 +439,9 @@ class EnhancedDataService:
         self.processing_jobs: Dict[str, DataProcessingJob] = {}
         self.sync_status: Dict[str, DataSyncStatus] = {}
         
-        # Initialize exchange configurations
         self._setup_exchange_configs()
         
-        # Thread pool for CPU-intensive tasks
+
         self.executor = ThreadPoolExecutor(max_workers=4)
     
     def _setup_exchange_configs(self):
@@ -610,7 +603,6 @@ class EnhancedDataService:
         """Download from Binance API - Falls back to Yahoo Finance for now"""
         logger.info(f"Binance API not implemented yet, falling back to Yahoo Finance for {symbol}")
     
-        # Convert datetime range back to period string for Yahoo Finance
         duration = end_date - start_date
         if duration.days <= 5:
             period = "5d"
@@ -624,11 +616,9 @@ class EnhancedDataService:
             period = "1y"
         else:
             period = "2y"
-    
-        # Use Yahoo Finance as fallback but mark as Binance source
+
         data = await self._download_yahoo_finance(symbol, period, interval)
 
-        # Update source to indicate it came from Binance request
         for point in data:
             point.source = DataSource.BINANCE
     
@@ -639,7 +629,6 @@ class EnhancedDataService:
         """Download from Coinbase API - Falls back to Yahoo Finance for now"""
         logger.info(f"Coinbase API not implemented yet, falling back to Yahoo Finance for {symbol}")
     
-        # Convert datetime range back to period string
         duration = end_date - start_date
         if duration.days <= 5:
             period = "5d"
@@ -681,7 +670,6 @@ class EnhancedDataService:
                     data[i].price_change = current_close - prev_close
                     data[i].price_change_percent = ((current_close - prev_close) / prev_close) * 100
             
-            # Calculate volume ratios (20-period rolling average)
             if len(data) >= 20:
                 for i in range(20, len(data)):
                     recent_volumes = [data[j].volume for j in range(i-19, i+1) if data[j].volume > 0]
@@ -696,7 +684,7 @@ class EnhancedDataService:
             
         except Exception as e:
             logger.error(f"Error calculating enhanced fields: {e}")
-            return data  # Return original data if calculation fails
+            return data  
     
     async def upload_csv_data(self, file_content: bytes, request: DataUploadRequest) -> DatasetMetadata:
         """Upload and process CSV data"""
@@ -741,8 +729,6 @@ class EnhancedDataService:
     
     async def _process_csv_dataframe(self, df: pd.DataFrame, request: DataUploadRequest) -> List[EnhancedOHLCVData]:
         """Process CSV DataFrame into enhanced OHLCV data"""
-        # This would implement CSV parsing logic
-        # For now, return empty list
         return []
     
     async def bulk_download(self, request: BulkDownloadRequest) -> str:

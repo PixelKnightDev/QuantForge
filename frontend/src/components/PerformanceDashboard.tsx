@@ -1,4 +1,4 @@
-// src/components/PerformanceDashboard.tsx
+
 import React from 'react';
 import {
   Box,
@@ -18,9 +18,7 @@ import {
   TableRow
 } from '@mui/material';
 
-// ============================================================================
-// TYPES & INTERFACES
-// ============================================================================
+
 
 interface PerformanceMetrics {
   returns: {
@@ -163,9 +161,7 @@ const RiskGauge: React.FC<{ value: number; max: number; label: string; color: st
   );
 };
 
-// ============================================================================
-// MAIN COMPONENT
-// ============================================================================
+
 
 const PerformanceDashboard: React.FC<PerformanceDashboardProps> = ({ results, loading = false }) => {
   if (!results) {

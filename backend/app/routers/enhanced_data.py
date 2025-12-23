@@ -1,165 +1,249 @@
-# app/routers/enhanced_data.py - Complete Phase 2 endpoints
-from fastapi import APIRouter, HTTPException, Query, File, UploadFile
-from typing import List, Optional, Dict, Any
-import pandas as pd
-import yfinance as yf
-from datetime import datetime, timedelta
+
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, File, UploadFile
+from typing import Dict, List, Optional
+import asyncio
+import uuid
+from datetime import datetime
 import logging
+import yfinance as yf
+import pandas as pd
+from pydantic import BaseModel
 
-router = APIRouter()
 logger = logging.getLogger(__name__)
+router = APIRouter()
 
-@router.get("/health")
-async def enhanced_data_health():
-    """Enhanced data service health check"""
-    return {
-        "status": "healthy",
-        "message": "Enhanced data service operational",
-        "features": [
-            "Data quality analysis",
-            "Multi-exchange support", 
-            "Bulk data operations",
-            "Advanced caching",
-            "CSV upload processing"
-        ],
-        "timestamp": datetime.now().isoformat()
-    }
+bulk_jobs: Dict[str, dict] = {}
 
-@router.get("/data/analyze/{symbol}")
-async def analyze_data_quality(
-    symbol: str,
-    start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
-    end_date: str = Query(..., description="End date (YYYY-MM-DD)")
+class BulkDownloadRequest(BaseModel):
+    symbols: List[str]
+    source: str = "yahoo_finance"
+    period: str = "1y"
+    interval: str = "1d"
+    parallel_downloads: int = 5
+    retry_failed: bool = True
+    cache_results: bool = True
+
+
+@router.post("/bulk-download")
+async def start_bulk_download(
+    background_tasks: BackgroundTasks,
+    request: BulkDownloadRequest
 ):
-    """Analyze data quality for a given symbol"""
+    """Start bulk download - matches your frontend expectations"""
     try:
-        # Download data for analysis
-        ticker = yf.Ticker(symbol)
-        data = ticker.history(start=start_date, end=end_date)
+        if not request.symbols:
+            raise HTTPException(status_code=400, detail="No symbols provided")
         
-        if data.empty:
-            raise HTTPException(status_code=404, detail=f"No data found for {symbol}")
+        if len(request.symbols) > 100:
+            raise HTTPException(status_code=400, detail="Too many symbols (max 100)")
         
-        # Calculate data quality metrics
-        total_rows = len(data)
-        missing_data = data.isnull().sum().sum()
-        duplicate_rows = data.duplicated().sum()
+        # Generate job ID
+        job_id = str(uuid.uuid4())
         
-        # Price analysis
-        price_stats = {
-            "mean": float(data['Close'].mean()),
-            "std": float(data['Close'].std()),
-            "min": float(data['Close'].min()),
-            "max": float(data['Close'].max()),
-            "volatility": float(data['Close'].pct_change().std() * 100)
+        # Initialize job tracking - matches your frontend JobStatus interface
+        bulk_jobs[job_id] = {
+            "job_id": job_id,
+            "job_type": "bulk_download",
+            "status": "pending",
+            "total_items": len(request.symbols),
+            "processed_items": 0,
+            "failed_items": 0,
+            "progress_percentage": 0.0,
+            "created_at": datetime.now().isoformat(),
+            "started_at": None,
+            "completed_at": None,
+            "error_messages": [],
+            "symbols": request.symbols,
+            "period": request.period,
+            "interval": request.interval,
+            "source": request.source,
+            "results": {},
+            "errors": {}
         }
         
-        # Volume analysis
-        volume_stats = {
-            "mean": float(data['Volume'].mean()),
-            "zero_volume_days": int((data['Volume'] == 0).sum()),
-            "volume_consistency": float(data['Volume'].std() / data['Volume'].mean())
+        # Start background download
+        background_tasks.add_task(
+            execute_bulk_download,
+            job_id,
+            request.symbols,
+            request.source,
+            request.period,
+            request.interval,
+            request.parallel_downloads,
+            request.retry_failed,
+            request.cache_results
+        )
+        
+        logger.info(f"🚀 Started bulk download job {job_id} for {len(request.symbols)} symbols")
+        
+        return {
+            "job_id": job_id,
+            "status": "started",
+            "message": f"Bulk download started for {len(request.symbols)} symbols",
+            "total_symbols": len(request.symbols)
         }
-        
-        # Gap analysis (price gaps > 5%)
-        price_changes = data['Close'].pct_change().abs()
-        large_gaps = (price_changes > 0.05).sum()
-        
-        # Data completeness
-        expected_trading_days = pd.bdate_range(start=start_date, end=end_date)
-        completeness_ratio = len(data) / len(expected_trading_days)
-        
-        analysis = {
-            "symbol": symbol,
-            "period": {
-                "start_date": start_date,
-                "end_date": end_date,
-                "total_days": total_rows
-            },
-            "data_quality": {
-                "completeness_ratio": round(completeness_ratio, 3),
-                "missing_data_points": int(missing_data),
-                "duplicate_rows": int(duplicate_rows),
-                "data_quality_score": round((1 - missing_data/total_rows) * completeness_ratio * 100, 1)
-            },
-            "price_analysis": price_stats,
-            "volume_analysis": volume_stats,
-            "anomalies": {
-                "large_price_gaps": int(large_gaps),
-                "zero_volume_days": volume_stats["zero_volume_days"],
-                "potential_issues": []
-            },
-            "recommendations": []
-        }
-        
-        # Add recommendations based on analysis
-        if completeness_ratio < 0.9:
-            analysis["recommendations"].append("Data completeness is low - consider alternative data source")
-        
-        if volume_stats["zero_volume_days"] > total_rows * 0.1:
-            analysis["recommendations"].append("High number of zero volume days detected")
-            
-        if large_gaps > total_rows * 0.05:
-            analysis["recommendations"].append("Multiple large price gaps detected - check for stock splits/dividends")
-        
-        if not analysis["recommendations"]:
-            analysis["recommendations"].append("Data quality is good for backtesting")
-        
-        return analysis
         
     except Exception as e:
-        logger.error(f"Error analyzing data quality for {symbol}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"❌ Failed to start bulk download: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start download: {str(e)}")
 
-@router.get("/data/sources")
-async def get_data_sources():
-    """Get available data sources and their capabilities"""
+@router.get("/jobs/{job_id}")
+async def get_job_status(job_id: str):
+    """Get job status - matches your frontend polling expectations"""
+    if job_id not in bulk_jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = bulk_jobs[job_id]
+    
+    # Return in the format your frontend expects (JobStatus interface)
     return {
-        "sources": [
-            {
-                "name": "Yahoo Finance",
-                "type": "free",
-                "markets": ["US", "International"],
-                "instruments": ["Stocks", "ETFs", "Indices", "Forex", "Crypto"],
-                "timeframes": ["1d", "1wk", "1mo"],
-                "real_time": False,
-                "rate_limits": "2000 requests/hour",
-                "status": "active"
-            },
-            {
-                "name": "Binance",
-                "type": "api_key_required",
-                "markets": ["Crypto"],
-                "instruments": ["Spot", "Futures"],
-                "timeframes": ["1m", "5m", "15m", "30m", "1h", "4h", "1d"],
-                "real_time": True,
-                "rate_limits": "1200 requests/minute",
-                "status": "available"
-            },
-            {
-                "name": "Coinbase Pro",
-                "type": "api_key_required", 
-                "markets": ["Crypto"],
-                "instruments": ["Spot"],
-                "timeframes": ["1m", "5m", "15m", "1h", "6h", "1d"],
-                "real_time": True,
-                "rate_limits": "10 requests/second",
-                "status": "available"
-            },
-            {
-                "name": "CSV Upload",
-                "type": "file_upload",
-                "markets": ["Custom"],
-                "instruments": ["Any"],
-                "timeframes": ["Custom"],
-                "real_time": False,
-                "rate_limits": "50MB file size limit",
-                "status": "active"
-            }
-        ],
-        "default_source": "Yahoo Finance",
-        "recommendation": "Use Yahoo Finance for stocks, Binance for crypto backtesting"
+        "job_id": job["job_id"],
+        "job_type": job["job_type"],
+        "status": job["status"],
+        "total_items": job["total_items"],
+        "processed_items": job["processed_items"],
+        "failed_items": job["failed_items"],
+        "progress_percentage": job["progress_percentage"],
+        "created_at": job["created_at"],
+        "started_at": job.get("started_at"),
+        "completed_at": job.get("completed_at"),
+        "error_messages": job["error_messages"]
     }
+
+@router.get("/data-sources")
+async def get_data_sources():
+    """Get available data sources - matches your frontend expectations"""
+    try:
+        
+        data_sources = [
+            {
+                "id": "yahoo_finance",
+                "name": "Yahoo Finance",
+                "description": "Free financial data from Yahoo Finance with comprehensive coverage",
+                "supported_intervals": ["1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"],
+                "requires_api_key": False,
+                "max_historical_days": 3650  # ~10 years
+            },
+            {
+                "id": "alpha_vantage",
+                "name": "Alpha Vantage",
+                "description": "Premium financial data provider with real-time and historical data",
+                "supported_intervals": ["1m", "5m", "15m", "30m", "1h", "1d"],
+                "requires_api_key": True,
+                "max_historical_days": 7300  # ~20 years
+            },
+            {
+                "id": "polygon",
+                "name": "Polygon.io",
+                "description": "High-quality financial market data for stocks, options, and crypto",
+                "supported_intervals": ["1m", "5m", "15m", "30m", "1h", "1d"],
+                "requires_api_key": True,
+                "max_historical_days": 7300  # ~20 years
+            }
+        ]
+        
+        return {
+            "sources": data_sources,
+            "total_sources": len(data_sources),
+            "default_source": "yahoo_finance"
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Failed to get data sources: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get data sources: {str(e)}")
+
+async def execute_bulk_download(
+    job_id: str,
+    symbols: List[str],
+    source: str,
+    period: str,
+    interval: str,
+    parallel_downloads: int,
+    retry_failed: bool,
+    cache_results: bool
+):
+    """Background task to execute bulk download"""
+    try:
+        job = bulk_jobs[job_id]
+        job["status"] = "running"
+        job["started_at"] = datetime.now().isoformat()
+        
+        logger.info(f"🔄 Executing bulk download for job {job_id}")
+        
+        # Download symbols with limited concurrency
+        semaphore = asyncio.Semaphore(parallel_downloads)
+        
+        async def download_single_symbol(symbol: str):
+            async with semaphore:
+                try:
+                    logger.info(f"📥 Downloading {symbol}")
+                    
+                    # Use yfinance for now (can be extended to support other sources)
+                    ticker = yf.Ticker(symbol)
+                    data = ticker.history(period=period, interval=interval)
+                    
+                    if data.empty:
+                        raise ValueError(f"No data available for {symbol}")
+                    
+                    # Convert to JSON format
+                    data_json = []
+                    for timestamp, row in data.iterrows():
+                        data_json.append({
+                            "timestamp": timestamp.isoformat(),
+                            "open": float(row["Open"]) if pd.notna(row["Open"]) else None,
+                            "high": float(row["High"]) if pd.notna(row["High"]) else None,
+                            "low": float(row["Low"]) if pd.notna(row["Low"]) else None,
+                            "close": float(row["Close"]) if pd.notna(row["Close"]) else None,
+                            "volume": int(row["Volume"]) if pd.notna(row["Volume"]) else 0,
+                            "symbol": symbol
+                        })
+                    
+                    # Store successful result
+                    job["results"][symbol] = data_json
+                    job["processed_items"] += 1
+                    job["progress_percentage"] = (job["processed_items"] / job["total_items"]) * 100
+                    
+                    logger.info(f"✅ Downloaded {symbol}: {len(data_json)} data points")
+                    
+                except Exception as e:
+                    error_msg = f"Failed to download {symbol}: {str(e)}"
+                    logger.error(f"❌ {error_msg}")
+                    
+                    job["errors"][symbol] = error_msg
+                    job["error_messages"].append(error_msg)
+                    job["failed_items"] += 1
+                    job["processed_items"] += 1  # Still count as processed
+                    job["progress_percentage"] = (job["processed_items"] / job["total_items"]) * 100
+        
+        # Execute all downloads
+        tasks = [download_single_symbol(symbol) for symbol in symbols]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Update final job status
+        job["status"] = "completed"
+        job["completed_at"] = datetime.now().isoformat()
+        job["progress_percentage"] = 100.0
+        
+        successful_count = len(job["results"])
+        failed_count = job["failed_items"]
+        
+        logger.info(f"✅ Bulk download job {job_id} completed")
+        logger.info(f"📊 Results: {successful_count} successful, {failed_count} failed")
+        
+        # Add summary to job
+        job["summary"] = {
+            "successful_downloads": successful_count,
+            "failed_downloads": failed_count,
+            "success_rate": (successful_count / job["total_items"]) * 100,
+            "total_data_points": sum(len(data) for data in job["results"].values())
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Bulk download job {job_id} failed: {e}")
+        job["status"] = "failed"
+        job["completed_at"] = datetime.now().isoformat()
+        job["error_messages"].append(f"Job execution failed: {str(e)}")
+
 
 @router.post("/data/bulk/validate")
 async def bulk_validate_symbols(symbols: List[str]):
@@ -169,7 +253,6 @@ async def bulk_validate_symbols(symbols: List[str]):
         
         for symbol in symbols:
             try:
-                # Quick validation with small date range
                 ticker = yf.Ticker(symbol)
                 data = ticker.history(period="5d")
                 
@@ -199,7 +282,6 @@ async def bulk_validate_symbols(symbols: List[str]):
                     "data_points": 0
                 })
         
-        # Summary statistics
         valid_count = sum(1 for r in validation_results if r["status"] == "valid")
         invalid_count = len(symbols) - valid_count
         
@@ -218,103 +300,139 @@ async def bulk_validate_symbols(symbols: List[str]):
         logger.error(f"Error in bulk validation: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/data/upload/csv")
-async def upload_csv_data(file: UploadFile = File(...)):
-    """Upload and process CSV data file"""
+@router.get("/data/analyze/{symbol}")
+async def analyze_data_quality(
+    symbol: str,
+    start_date: str = Query(..., description="Start date (YYYY-MM-DD)"),
+    end_date: str = Query(..., description="End date (YYYY-MM-DD)")
+):
+    """Analyze data quality for a given symbol"""
     try:
-        if not file.filename.endswith('.csv'):
-            raise HTTPException(status_code=400, detail="File must be a CSV")
+
+        ticker = yf.Ticker(symbol)
+        data = ticker.history(start=start_date, end=end_date)
         
-        # Read CSV file
-        content = await file.read()
+        if data.empty:
+            raise HTTPException(status_code=404, detail=f"No data found for {symbol}")
         
-        try:
-            df = pd.read_csv(pd.io.common.BytesIO(content))
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid CSV format: {e}")
+        total_rows = len(data)
+        missing_data = data.isnull().sum().sum()
         
-        # Analyze CSV structure
-        analysis = {
-            "filename": file.filename,
-            "size_bytes": len(content),
-            "rows": len(df),
-            "columns": list(df.columns),
-            "data_types": {col: str(dtype) for col, dtype in df.dtypes.items()},
-            "missing_values": df.isnull().sum().to_dict(),
-            "date_columns": [],
-            "numeric_columns": [],
-            "sample_data": df.head(3).to_dict('records')
+        price_stats = {
+            "mean": float(data['Close'].mean()),
+            "std": float(data['Close'].std()),
+            "min": float(data['Close'].min()),
+            "max": float(data['Close'].max()),
+            "volatility": float(data['Close'].pct_change().std() * 100)
         }
         
-        # Identify column types
-        for col in df.columns:
-            if df[col].dtype in ['int64', 'float64']:
-                analysis["numeric_columns"].append(col)
-            
-            # Try to detect date columns
-            if 'date' in col.lower() or 'time' in col.lower():
-                analysis["date_columns"].append(col)
+        # Volume analysis
+        volume_stats = {
+            "mean": float(data['Volume'].mean()),
+            "zero_volume_days": int((data['Volume'] == 0).sum()),
+        }
         
-        # Validation recommendations
-        recommendations = []
-        required_cols = ['date', 'open', 'high', 'low', 'close', 'volume']
-        missing_required = [col for col in required_cols if col not in [c.lower() for c in df.columns]]
+        # Gap analysis (price gaps > 5%)
+        price_changes = data['Close'].pct_change().abs()
+        large_gaps = (price_changes > 0.05).sum()
         
-        if missing_required:
-            recommendations.append(f"Missing recommended columns: {missing_required}")
+        # Data completeness
+        expected_trading_days = pd.bdate_range(start=start_date, end=end_date)
+        completeness_ratio = len(data) / len(expected_trading_days)
         
-        if not analysis["date_columns"]:
-            recommendations.append("No date column detected - ensure you have a date/timestamp column")
-        
-        if len(analysis["numeric_columns"]) < 4:
-            recommendations.append("Ensure you have OHLC price columns")
-        
-        analysis["recommendations"] = recommendations
-        analysis["validation_status"] = "valid" if not missing_required else "needs_review"
+        analysis = {
+            "symbol": symbol,
+            "period": {
+                "start_date": start_date,
+                "end_date": end_date,
+                "total_days": total_rows
+            },
+            "data_quality": {
+                "completeness_ratio": round(completeness_ratio, 3),
+                "missing_data_points": int(missing_data),
+                "data_quality_score": round((1 - missing_data/total_rows) * completeness_ratio * 100, 1)
+            },
+            "price_analysis": price_stats,
+            "volume_analysis": volume_stats,
+            "anomalies": {
+                "large_price_gaps": int(large_gaps),
+                "zero_volume_days": volume_stats["zero_volume_days"],
+            }
+        }
         
         return analysis
         
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Error processing CSV upload: {e}")
+        logger.error(f"Error analyzing data quality for {symbol}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/data/cache/stats")
-async def get_cache_statistics():
-    """Get data cache statistics and management info"""
+# ============================================================================
+# JOB MANAGEMENT ENDPOINTS
+# ============================================================================
+
+@router.get("/jobs/{job_id}/results")
+async def get_job_results(job_id: str):
+    """Get detailed results of completed job"""
+    if job_id not in bulk_jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = bulk_jobs[job_id]
+    
+    if job["status"] not in ["completed", "failed"]:
+        raise HTTPException(status_code=400, detail="Job not completed yet")
+    
     return {
-        "cache_stats": {
-            "total_cached_symbols": 0,  # Placeholder - implement based on your cache
-            "cache_size_mb": 0,
-            "cache_hit_rate": 0.85,
-            "last_cleanup": datetime.now().isoformat()
-        },
-        "cache_config": {
-            "max_cache_size_mb": 500,
-            "cache_expiry_hours": 24,
-            "auto_cleanup": True
-        },
-        "performance": {
-            "avg_cache_retrieval_ms": 15,
-            "avg_api_call_ms": 1200,
-            "cache_effectiveness": "85% faster than API calls"
-        }
+        "job_id": job_id,
+        "status": job["status"],
+        "summary": job.get("summary", {}),
+        "successful_symbols": list(job["results"].keys()),
+        "failed_symbols": list(job["errors"].keys()),
+        "results": job["results"],
+        "errors": job["errors"],
+        "total_data_points": sum(len(data) for data in job["results"].values())
     }
 
-@router.post("/data/cache/clear")
-async def clear_data_cache():
-    """Clear data cache"""
-    try:
-        # Implement cache clearing logic here
-        # For now, return success message
-        
-        return {
-            "message": "Cache cleared successfully",
-            "timestamp": datetime.now().isoformat(),
-            "status": "success"
-        }
-        
-    except Exception as e:
-        logger.error(f"Error clearing cache: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+@router.delete("/jobs/{job_id}")
+async def cancel_job(job_id: str):
+    """Cancel a running job"""
+    if job_id not in bulk_jobs:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    job = bulk_jobs[job_id]
+    
+    if job["status"] in ["completed", "failed"]:
+        return {"message": f"Job already {job['status']}"}
+    
+    job["status"] = "cancelled"
+    job["completed_at"] = datetime.now().isoformat()
+    
+    return {
+        "job_id": job_id,
+        "status": "cancelled",
+        "message": "Job cancelled successfully"
+    }
+
+@router.get("/jobs")
+async def list_all_jobs():
+    """List all jobs (for debugging/admin)"""
+    return {
+        "jobs": list(bulk_jobs.values()),
+        "total_jobs": len(bulk_jobs),
+        "active_jobs": len([job for job in bulk_jobs.values() if job["status"] == "running"])
+    }
+
+@router.get("/health")
+async def enhanced_data_health():
+    """Health check for enhanced data service"""
+    return {
+        "status": "healthy",
+        "active_jobs": len([job for job in bulk_jobs.values() if job["status"] == "running"]),
+        "total_jobs": len(bulk_jobs),
+        "features": [
+            "Bulk data download",
+            "Job tracking", 
+            "Data validation",
+            "Quality analysis"
+        ],
+        "timestamp": datetime.now().isoformat()
+    }

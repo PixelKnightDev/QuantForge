@@ -1,7 +1,6 @@
-// frontend/src/components/BulkDownload.tsx
+
 import React, { useState, useEffect } from 'react';
 import {
-  Paper,
   Typography,
   Box,
   Button,
@@ -32,7 +31,6 @@ import {
   Download,
   Add,
   Delete,
-  PlayArrow,
   Refresh,
   CheckCircle,
   Error as ErrorIcon,
@@ -128,22 +126,27 @@ const BulkDownload: React.FC<BulkDownloadProps> = ({ onDownloadComplete }) => {
     loadDataSources();
   }, []);
 
-  // Poll job status when downloading
+  // FIXED: Poll job status when downloading - proper dependency array and status checking
   useEffect(() => {
     let intervalId: number;
     
-    if (currentJob && currentJob.status === 'running') {
+    if (currentJob && (currentJob.status === 'running' || currentJob.status === 'pending')) {
+      console.log(`🔄 Starting polling for job: ${currentJob.job_id} (status: ${currentJob.status})`);
+      
       intervalId = window.setInterval(() => {
         pollJobStatus(currentJob.job_id);
       }, 2000); // Poll every 2 seconds
+    } else if (currentJob) {
+      console.log(`⏹️ Stopping polling - job status: ${currentJob.status}`);
     }
     
     return () => {
       if (intervalId) {
+        console.log(`🛑 Clearing polling interval`);
         window.clearInterval(intervalId);
       }
     };
-  }, [currentJob]);
+  }, [currentJob?.status, currentJob?.job_id]); // FIXED: Watch both status and job_id
 
   const loadDataSources = async () => {
     try {
@@ -199,6 +202,8 @@ const BulkDownload: React.FC<BulkDownloadProps> = ({ onDownloadComplete }) => {
         cache_results: true
       };
 
+      console.log('🚀 Starting bulk download request:', request);
+
       const response = await fetch('http://localhost:8000/api/enhanced-data/bulk-download', {
         method: 'POST',
         headers: {
@@ -213,6 +218,7 @@ const BulkDownload: React.FC<BulkDownloadProps> = ({ onDownloadComplete }) => {
       }
 
       const result = await response.json();
+      console.log('📦 Bulk download started:', result);
       
       // Start polling for job status
       setCurrentJob({
@@ -233,15 +239,22 @@ const BulkDownload: React.FC<BulkDownloadProps> = ({ onDownloadComplete }) => {
     }
   };
 
+  // FIXED: Enhanced polling with better logging and status checking
   const pollJobStatus = async (jobId: string) => {
     try {
+      console.log(`🔍 Polling job status for: ${jobId}`);
+      
       const response = await fetch(`http://localhost:8000/api/enhanced-data/jobs/${jobId}`);
       
       if (response.ok) {
         const jobStatus: JobStatus = await response.json();
+        console.log(`📊 Job status response:`, jobStatus);
+        
         setCurrentJob(jobStatus);
         
-        if (jobStatus.status === 'completed' || jobStatus.status === 'failed') {
+        // FIXED: Check for all completion states including 'cancelled'
+        if (jobStatus.status === 'completed' || jobStatus.status === 'failed' || jobStatus.status === 'cancelled') {
+          console.log(`✅ Job finished with status: ${jobStatus.status}`);
           setIsDownloading(false);
           onDownloadComplete(jobStatus);
           
@@ -249,9 +262,12 @@ const BulkDownload: React.FC<BulkDownloadProps> = ({ onDownloadComplete }) => {
             setActiveJobs(prev => [...prev, jobStatus]);
           }
         }
+      } else {
+        console.error(`❌ Failed to fetch job status: ${response.status} ${response.statusText}`);
       }
     } catch (err) {
-      console.error('Failed to poll job status:', handleError(err));
+      console.error('❌ Failed to poll job status:', handleError(err));
+      // Don't stop polling on network errors, just log them
     }
   };
 
@@ -292,16 +308,81 @@ const BulkDownload: React.FC<BulkDownloadProps> = ({ onDownloadComplete }) => {
     return `${rate.toFixed(1)}%`;
   };
 
+  // Add download functionality
+  const downloadJobResults = async (jobId: string, format: 'csv' | 'json' = 'csv') => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/enhanced-data/jobs/${jobId}/results`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch job results');
+      }
+      
+      const data = await response.json();
+      
+      if (format === 'csv') {
+        // Convert to CSV format
+        let csvContent = '';
+        
+        // Process each symbol's data
+        Object.entries(data.results).forEach(([symbol, symbolData]: [string, any]) => {
+          if (Array.isArray(symbolData) && symbolData.length > 0) {
+            // Add header for first symbol
+            if (csvContent === '') {
+              csvContent = 'symbol,timestamp,open,high,low,close,volume\n';
+            }
+            
+            // Add data rows
+            symbolData.forEach((row: any) => {
+              csvContent += `${symbol},${row.timestamp},${row.open || ''},${row.high || ''},${row.low || ''},${row.close || ''},${row.volume || 0}\n`;
+            });
+          }
+        });
+        
+        // Download CSV file
+        const blob = new Blob([csvContent], { type: 'text/csv' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `bulk_data_${jobId.substring(0, 8)}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+      } else {
+        // Download as JSON
+        const blob = new Blob([JSON.stringify(data.results, null, 2)], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `bulk_data_${jobId.substring(0, 8)}.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      }
+      
+      console.log(`✅ Downloaded ${format.toUpperCase()} file for job ${jobId}`);
+      
+    } catch (err) {
+      console.error('Failed to download results:', handleError(err));
+      setError(`Failed to download results: ${handleError(err)}`);
+    }
+  };
+
   const selectedSourceData = dataSources.find(ds => ds.id === selectedSource);
 
   return (
-    <Paper sx={{ p: 3 }}>
-      <Typography variant="h5" gutterBottom>
-        📦 Bulk Data Download
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Download market data for multiple symbols simultaneously from various data sources
-      </Typography>
+    <Card sx={{ border: 'none' }}>
+      <CardContent sx={{ p: 3 }}>
+        <Box sx={{ mb: 2, pb: 2, borderBottom: '2px solid', borderColor: 'divider' }}>
+          <Typography variant="h5" fontWeight={700}>
+            📦 Bulk Data Download
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Download market data for multiple symbols simultaneously from various data sources
+          </Typography>
+        </Box>
 
       {/* Symbol Management */}
       <Card variant="outlined" sx={{ mb: 3 }}>
@@ -474,8 +555,8 @@ const BulkDownload: React.FC<BulkDownloadProps> = ({ onDownloadComplete }) => {
         </Button>
       </Box>
 
-      {/* Current Job Progress */}
-      {currentJob && currentJob.status === 'running' && (
+      {/* FIXED: Current Job Progress - show for running AND pending */}
+      {currentJob && (currentJob.status === 'running' || currentJob.status === 'pending') && (
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
@@ -504,6 +585,35 @@ const BulkDownload: React.FC<BulkDownloadProps> = ({ onDownloadComplete }) => {
             </Typography>
           </CardContent>
         </Card>
+      )}
+
+      {/* ADDED: Success notification for completed jobs with download buttons */}
+      {currentJob && currentJob.status === 'completed' && (
+        <Alert severity="success" sx={{ mb: 3 }}>
+          <Box display="flex" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
+            <Typography>
+              ✅ Download completed successfully! {currentJob.total_items - currentJob.failed_items} of {currentJob.total_items} symbols downloaded.
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => downloadJobResults(currentJob.job_id, 'csv')}
+                startIcon={<Download />}
+              >
+                Download CSV
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => downloadJobResults(currentJob.job_id, 'json')}
+                startIcon={<Download />}
+              >
+                Download JSON
+              </Button>
+            </Box>
+          </Box>
+        </Alert>
       )}
 
       {/* Error Display */}
@@ -551,17 +661,27 @@ const BulkDownload: React.FC<BulkDownloadProps> = ({ onDownloadComplete }) => {
                         {calculateDuration(job.started_at, job.completed_at)}
                       </TableCell>
                       <TableCell>
-                        <Tooltip title="View Details">
-                          <IconButton 
-                            size="small"
-                            onClick={() => {
-                              setCurrentJob(job);
-                              setShowJobDetails(true);
-                            }}
-                          >
-                            <Info />
-                          </IconButton>
-                        </Tooltip>
+                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                          <Tooltip title="Download CSV">
+                            <IconButton 
+                              size="small"
+                              onClick={() => downloadJobResults(job.job_id, 'csv')}
+                            >
+                              <Download />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="View Details">
+                            <IconButton 
+                              size="small"
+                              onClick={() => {
+                                setCurrentJob(job);
+                                setShowJobDetails(true);
+                              }}
+                            >
+                              <Info />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -644,7 +764,8 @@ const BulkDownload: React.FC<BulkDownloadProps> = ({ onDownloadComplete }) => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Paper>
+      </CardContent>
+    </Card>
   );
 };
 

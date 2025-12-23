@@ -853,6 +853,79 @@ class ApiService {
     return response.data;
   }
 
+  // NEW: Start demo strategy (missing from your current file)
+  async startDemoStrategy(): Promise<{ strategy_id: string; status: string; message: string }> {
+    try {
+      console.log('🚀 Starting demo strategy...');
+      
+      const response = await this.client.post('/api/realtime/start-demo-strategy');
+
+      console.log('✅ Demo strategy started:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error starting demo strategy:', error);
+      throw error;
+    }
+  }
+
+  // NEW: Trigger demo signal (for testing)
+  async triggerDemoSignal(strategyId: string): Promise<{ message: string }> {
+    try {
+      console.log(`🎯 Triggering demo signal for: ${strategyId}`);
+      
+      const response = await this.client.post(`/api/realtime/trigger-demo-signal/${strategyId}`);
+
+      console.log(`✅ Demo signal triggered:`, response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error(`❌ Error triggering demo signal:`, error);
+      throw error;
+    }
+  }
+
+  // NEW: Start market data simulation
+  async startMarketDataSimulation(): Promise<{ message: string }> {
+    try {
+      console.log('📊 Starting market data simulation...');
+      
+      const response = await this.client.post('/api/realtime/start-market-data-simulation');
+
+      console.log('✅ Market data simulation started:', response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error starting market data simulation:', error);
+      throw error;
+    }
+  }
+
+  // NEW: Test backend connection for real-time services
+  async testRealtimeConnection(): Promise<{ status: string; timestamp: string }> {
+    try {
+      const response = await this.client.get('/api/realtime/realtime-engine-health');
+      
+      console.log('✅ Real-time backend connection test successful');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Real-time backend connection test failed:', error);
+      throw error;
+    }
+  }
+
+  // NEW: Get performance summary for all strategies
+  async getRealtimePerformanceSummary(): Promise<any> {
+    try {
+      console.log('📊 Getting real-time performance summary...');
+      
+      const response = await this.client.get('/api/realtime/realtime-performance-summary');
+      
+      console.log('✅ Retrieved performance summary');
+      return response.data;
+    } catch (error: any) {
+      console.error('❌ Error getting performance summary:', error);
+      throw error;
+    }
+  }
+
 }
 
 // Create and export a single instance

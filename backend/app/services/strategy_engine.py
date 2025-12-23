@@ -1,4 +1,4 @@
-# app/services/strategy_engine.py - FIXED indicator integration
+
 import pandas as pd
 import numpy as np
 from typing import Dict, List, Tuple, Optional
@@ -37,10 +37,7 @@ class StrategyEngine:
                 logger.warning(f"No data found for {symbol} from {start_date} to {end_date}")
                 return pd.DataFrame()
             
-            # Normalize column names to lowercase
             data.columns = [col.lower() for col in data.columns]
-            
-            # Ensure we have the required columns
             required_cols = ['open', 'high', 'low', 'close', 'volume']
             missing_cols = [col for col in required_cols if col not in data.columns]
             if missing_cols:
@@ -60,7 +57,7 @@ class StrategyEngine:
         try:
             logger.info(f"Calculating indicator: {indicator_name} with params: {parameters}")
             
-            # 🔧 FIX 1: Handle basic price/volume indicators
+
             if indicator_name == "price":
                 result = data['close'].values
                 logger.info(f"Price indicator: {len(result)} values, range: {result.min():.2f} - {result.max():.2f}")
@@ -69,8 +66,7 @@ class StrategyEngine:
                 result = data['volume'].values
                 logger.info(f"Volume indicator: {len(result)} values")
                 return result
-            
-            # 🔧 FIX 2: Pass correct data types to technical indicators
+
             # Technical indicators expect pd.Series, not DataFrame
             close_series = data['close']
             high_series = data['high'] 
@@ -135,8 +131,7 @@ class StrategyEngine:
                 if result is None:
                     logger.error(f"Indicator {indicator_name} returned None")
                     return None
-                
-                # 🔧 FIX 3: Handle pd.Series results properly
+
                 if isinstance(result, pd.Series):
                     result_array = result.values
                 elif isinstance(result, np.ndarray):
@@ -145,7 +140,6 @@ class StrategyEngine:
                     logger.error(f"Unexpected result type from {indicator_name}: {type(result)}")
                     return None
                 
-                # 🔧 FIX 4: Ensure proper length and handle NaN values
                 if len(result_array) != len(data):
                     if len(result_array) < len(data):
                         # Pad with NaN at the beginning (common for indicators with lookback)
@@ -172,8 +166,6 @@ class StrategyEngine:
         except Exception as e:
             logger.error(f"Error calculating indicator {indicator_name}: {e}")
             return None
-
-    # 🔧 FIX 5: Enhanced position sizing calculation
     def calculate_position_size(self, strategy: Strategy, 
                                price: float, available_cash: float) -> float:
         """Calculate position size based on strategy configuration - ENHANCED"""
@@ -190,7 +182,7 @@ class StrategyEngine:
                 risk_per_share = price * (strategy.risk_management.stop_loss_percent / 100)
                 shares = risk_amount / risk_per_share if risk_per_share > 0 else 0
             else:
-                # Fallback to 1% of available cash
+   
                 amount = available_cash * 0.01
                 shares = amount / price
         else:
@@ -208,7 +200,6 @@ class StrategyEngine:
         
         return max(0, shares)
     
-    # 🔧 FIX 6: Enhanced risk management during simulation
     async def _check_risk_management(self, position: Position, current_price: float, 
                                    current_timestamp: datetime, strategy: Strategy):
         """Check if position should be closed due to risk management rules"""
@@ -227,7 +218,7 @@ class StrategyEngine:
         
         return False
     
-    # 🔧 FIX 7: Enhanced simulation with risk management checks
+
     async def simulate_strategy(self, strategy: Strategy, 
                                symbol: str, start_date: str, 
                                end_date: str) -> Portfolio:
@@ -254,7 +245,6 @@ class StrategyEngine:
         signals = await self.generate_signals(strategy, symbol, data)
         logger.info(f"Generated {len(signals)} signals")
         
-        # 🔧 ENHANCED: Process signals day by day with risk management
         for i in range(1, len(data)):
             current_timestamp = data.index[i]
             current_price = data.iloc[i]['close']

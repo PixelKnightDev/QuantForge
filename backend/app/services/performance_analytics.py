@@ -1,4 +1,4 @@
-# app/services/performance_analytics.py - FIXED VERSION with NaN handling
+
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Optional, Tuple
@@ -88,7 +88,7 @@ class PerformanceAnalytics:
             current_drawdown=current_drawdown,
             monthly_returns=monthly_returns,
             benchmark_comparison=benchmark_comparison,
-            initial_capital=100000.0,  # Fixed initial capital
+            initial_capital=100000.0,
             risk_free_rate=self.risk_free_rate
         )
     
@@ -107,7 +107,7 @@ class PerformanceAnalytics:
         date_range = pd.date_range(start=start, end=end, freq='D')
         
         # Initialize portfolio tracking
-        initial_capital = 100000.0  # Default starting capital
+        initial_capital = 100000.0  
         current_capital = initial_capital
         
         performance_data = []
@@ -129,7 +129,7 @@ class PerformanceAnalytics:
             
             # Update capital
             current_capital += daily_pnl
-            current_capital = max(current_capital, 0.01)  # Ensure positive capital
+            current_capital = max(current_capital, 0.01) 
             
             # Calculate returns
             daily_return = safe_divide(daily_pnl, current_capital, 0.0)
@@ -633,26 +633,22 @@ class PerformanceAnalytics:
         largest_win_percent = max(trade_returns) if trade_returns else 0.0
         largest_loss_percent = min(trade_returns) if trade_returns else 0.0
         
-        # Calculate turnover percentage (simplified version)
-        # Turnover = Total trade value / Average portfolio value * 100
         total_trade_value = 0.0
         for trade in trades:
             if hasattr(trade, 'entry_price') and hasattr(trade, 'quantity'):
                 trade_value = safe_float(trade.entry_price) * safe_float(trade.quantity)
                 total_trade_value += trade_value
         
-        # Estimate portfolio value from trades (this is a simplified calculation)
-        # In production, you'd want to track actual portfolio values over time
-        estimated_avg_portfolio = 100000.0  # Default to initial capital
+        estimated_avg_portfolio = 100000.0  
         if trades:
             # Try to estimate from first trade
             first_trade = trades[0]
             if hasattr(first_trade, 'entry_price') and hasattr(first_trade, 'quantity'):
                 estimated_avg_portfolio = safe_float(first_trade.entry_price) * safe_float(first_trade.quantity) * 10
         
-        # Annualized turnover rate
+
         if len(trades) > 0 and estimated_avg_portfolio > 0:
-            # Assume trades span approximately 1 year for simplification
+
             turnover_percent = safe_divide(total_trade_value, estimated_avg_portfolio, 0.0) * 100
         else:
             turnover_percent = 0.0

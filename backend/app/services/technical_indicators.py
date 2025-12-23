@@ -1,5 +1,4 @@
-# backend/app/services/technical_indicators.py
-# Phase 3: Technical Indicators Module - Foundation for all strategies
+
 
 import pandas as pd
 import numpy as np
@@ -37,9 +36,6 @@ class TechnicalIndicators:
     Supports vectorized operations for performance.
     """
     
-    # =============================================================================
-    # MOVING AVERAGES
-    # =============================================================================
     
     @staticmethod
     def sma(data: pd.Series, period: int) -> pd.Series:
@@ -99,9 +95,7 @@ class TechnicalIndicators:
         
         return data.rolling(window=period).apply(calculate_wma, raw=True)
     
-    # =============================================================================
-    # MOMENTUM INDICATORS
-    # =============================================================================
+
     
     @staticmethod
     def rsi(data: pd.Series, period: int = 14) -> pd.Series:
@@ -196,9 +190,6 @@ class TechnicalIndicators:
         
         return williams_r
     
-    # =============================================================================
-    # TREND INDICATORS
-    # =============================================================================
     
     @staticmethod
     def macd(data: pd.Series, fast_period: int = 12, slow_period: int = 26, 
@@ -294,9 +285,6 @@ class TechnicalIndicators:
             'di_minus': di_minus
         }
     
-    # =============================================================================
-    # VOLATILITY INDICATORS  
-    # =============================================================================
     
     @staticmethod
     def bollinger_bands(data: pd.Series, period: int = 20, std_dev: float = 2.0) -> Dict[str, pd.Series]:
@@ -364,10 +352,7 @@ class TechnicalIndicators:
         atr = true_range.rolling(window=period, min_periods=period).mean()
         
         return atr
-    
-    # =============================================================================
-    # VOLUME INDICATORS
-    # =============================================================================
+
     
     @staticmethod
     def obv(close: pd.Series, volume: pd.Series) -> pd.Series:
@@ -438,9 +423,7 @@ class TechnicalIndicators:
         
         return vwap
     
-    # =============================================================================
-    # UTILITY METHODS
-    # =============================================================================
+
     
     @classmethod
     def calculate_indicator(cls, indicator_name: str, data: Dict[str, pd.Series], 

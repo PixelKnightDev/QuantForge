@@ -1,4 +1,4 @@
-# app/routers/strategy.py - COMPLETE FILE with indicators endpoint
+
 from fastapi import APIRouter, HTTPException
 from typing import Dict, List, Optional
 import logging
@@ -6,9 +6,9 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from ..services.strategy_engine import StrategyEngine
-from ..services.performance_analytics import PerformanceAnalytics  # Your existing analytics
+from ..services.performance_analytics import PerformanceAnalytics 
 from ..models.strategy_models import Strategy, Portfolio
-from ..models.performance_models import PerformanceReport  # Your existing models
+from ..models.performance_models import PerformanceReport  
 
 class BacktestRequest(BaseModel):
     # Strategy fields
@@ -39,7 +39,7 @@ async def get_available_indicators():
     try:
         from ..services.technical_indicators import TechnicalIndicators
         
-        # Get available indicators from your technical indicators class
+
         indicators_info = TechnicalIndicators.get_available_indicators()
         
         # Convert to the format your frontend expects
@@ -162,7 +162,6 @@ async def run_strategy_backtest(request: BacktestRequest):
                     "positions": [],
                     "trades": []
                 },
-                # ADD EMPTY ARRAYS FOR CHARTS WHEN NO TRADES
                 "portfolio_values": [initial_capital],
                 "portfolio_dates": [start_date],
                 "performance_report": {
@@ -188,23 +187,20 @@ async def run_strategy_backtest(request: BacktestRequest):
             benchmark_symbol="SPY"
         )
         
-        # GENERATE PORTFOLIO TIME SERIES DATA (BEFORE USING IT)
         logger.info("📊 Generating portfolio time series for advanced visualizations")
         
         # Create portfolio value progression over time
-        portfolio_values = [initial_capital]  # Start with initial capital
-        portfolio_dates = [start_date]  # Start with backtest start date
+        portfolio_values = [initial_capital]
+        portfolio_dates = [start_date]  
         
-        # Sort trades by exit time to create chronological progression
         sorted_trades = sorted(portfolio.trades, key=lambda t: t.exit_timestamp)
         
         current_value = initial_capital
         for trade in sorted_trades:
-            current_value += trade.pnl  # Add P&L from each trade
+            current_value += trade.pnl  
             portfolio_values.append(current_value)
             portfolio_dates.append(trade.exit_timestamp.isoformat())
         
-        # Add final portfolio value at end date
         portfolio_values.append(portfolio.total_value)
         portfolio_dates.append(end_date)
         
@@ -242,7 +238,6 @@ async def run_strategy_backtest(request: BacktestRequest):
                     "pnl_percent": trade.pnl_percent,
                     "rule_name": trade.rule_name,
                     "exit_reason": trade.exit_reason,
-                    # ADD DURATION CALCULATION
                     "duration_hours": (trade.exit_timestamp - trade.entry_timestamp).total_seconds() / 3600
                 }
                 for trade in portfolio.trades
@@ -327,7 +322,6 @@ async def run_strategy_backtest(request: BacktestRequest):
             },
             "portfolio": portfolio_dict,
             
-            # ADD PORTFOLIO TIME SERIES DATA HERE (NOW DEFINED ABOVE)
             "portfolio_values": portfolio_values,
             "portfolio_dates": portfolio_dates,
 

@@ -1,4 +1,4 @@
-// frontend/src/components/RealtimeDashboard.tsx - FIXED VERSION
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   websocketService, 

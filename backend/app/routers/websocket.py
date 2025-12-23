@@ -1,4 +1,4 @@
-# backend/app/routers/websocket.py
+
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from typing import Dict, List
 import json
@@ -14,7 +14,7 @@ router = APIRouter()
 class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
-        self.strategy_subscribers: Dict[str, List[str]] = {}  # strategy_id -> [connection_ids]
+        self.strategy_subscribers: Dict[str, List[str]] = {}  
         
     async def connect(self, websocket: WebSocket) -> str:
         await websocket.accept()
@@ -125,7 +125,6 @@ async def handle_client_message(message: dict, connection_id: str):
             "timestamp": datetime.now().isoformat()
         }, connection_id)
 
-# Functions to broadcast updates (called from strategy engine)
 async def broadcast_strategy_update(strategy_id: str, update_data: dict):
     """Broadcast strategy performance updates to subscribers"""
     message = {
@@ -189,6 +188,3 @@ async def simulate_real_time_data():
             }, connection_id)
         
         await asyncio.sleep(1)  # Update every second
-
-# Start real-time simulation (optional - for testing)
-# asyncio.create_task(simulate_real_time_data())

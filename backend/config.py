@@ -14,8 +14,8 @@ API_RELOAD = True
 
 # Data Configuration
 DEFAULT_SYMBOLS = ["AAPL", "GOOGL", "MSFT", "TSLA", "BTC-USD", "ETH-USD"]
-DEFAULT_PERIOD = "2y"  # 2 years of data
-DEFAULT_INTERVAL = "1d"  # Daily data
+DEFAULT_PERIOD = "2y"  # 
+DEFAULT_INTERVAL = "1d"  
 
 # Create directories if they don't exist
 RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)

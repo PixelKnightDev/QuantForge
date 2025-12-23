@@ -1,7 +1,6 @@
-// src/components/MarketData.tsx
+
 import React, { useState } from 'react';
 import {
-  Paper,
   Typography,
   Box,
   Button,
@@ -95,58 +94,62 @@ const MarketData: React.FC<MarketDataProps> = ({ connected }) => {
   const latestData = getLatestData();
 
   return (
-    <Paper sx={{ p: 3 }}>
-      <Typography variant="h5" gutterBottom>
-        📈 Enhanced Market Data
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Real-time market data with enhanced metrics and quality indicators
-      </Typography>
+    <Card sx={{ border: 'none' }}>
+      <CardContent sx={{ p: 3 }}>
+        <Box sx={{ mb: 2, pb: 2, borderBottom: '2px solid', borderColor: 'divider' }}>
+          <Typography variant="h5" fontWeight={700}>
+            📈 Market Data
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Real-time market data with enhanced metrics and quality indicators
+          </Typography>
+        </Box>
 
-      {/* Controls */}
-      <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-        <FormControl sx={{ minWidth: 150 }}>
-          <InputLabel>Symbol</InputLabel>
-          <Select
-            value={selectedSymbol}
-            label="Symbol"
-            onChange={(e) => setSelectedSymbol(e.target.value)}
+        {/* Controls */}
+        <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+          <FormControl sx={{ minWidth: 150 }} size="small">
+            <InputLabel>Symbol</InputLabel>
+            <Select
+              value={selectedSymbol}
+              label="Symbol"
+              onChange={(e) => setSelectedSymbol(e.target.value)}
+              disabled={loading || !connected}
+            >
+              {SYMBOLS.map((symbol) => (
+                <MenuItem key={symbol} value={symbol}>
+                  {symbol}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          {/* NEW: Period selection */}
+          <FormControl sx={{ minWidth: 120 }} size="small">
+            <InputLabel>Period</InputLabel>
+            <Select
+              value={selectedPeriod}
+              label="Period"
+              onChange={(e) => setSelectedPeriod(e.target.value)}
+              disabled={loading || !connected}
+            >
+              {PERIODS.map((period) => (
+                <MenuItem key={period} value={period}>
+                  {period.toUpperCase()}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <Button
+            variant="contained"
+            startIcon={loading ? <CircularProgress size={16} /> : <ShowChart />}
+            onClick={loadMarketData}
             disabled={loading || !connected}
+            size="small"
           >
-            {SYMBOLS.map((symbol) => (
-              <MenuItem key={symbol} value={symbol}>
-                {symbol}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        {/* NEW: Period selection */}
-        <FormControl sx={{ minWidth: 120 }}>
-          <InputLabel>Period</InputLabel>
-          <Select
-            value={selectedPeriod}
-            label="Period"
-            onChange={(e) => setSelectedPeriod(e.target.value)}
-            disabled={loading || !connected}
-          >
-            {PERIODS.map((period) => (
-              <MenuItem key={period} value={period}>
-                {period.toUpperCase()}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        <Button
-          variant="contained"
-          startIcon={loading ? <CircularProgress size={20} /> : <ShowChart />}
-          onClick={loadMarketData}
-          disabled={loading || !connected}
-        >
-          {loading ? 'Loading...' : 'Load Data'}
-        </Button>
-      </Box>
+            {loading ? 'Loading...' : 'Load Data'}
+          </Button>
+        </Box>
 
       {/* Error Display */}
       {error && (
@@ -286,19 +289,20 @@ const MarketData: React.FC<MarketDataProps> = ({ connected }) => {
         </>
       )}
 
-      {/* Empty State */}
-      {!marketData && !loading && !error && (
-        <Box textAlign="center" py={4}>
-          <TrendingUp sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            No Data Loaded
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Select a symbol and period, then click "Load Data" to view enhanced market information
-          </Typography>
-        </Box>
-      )}
-    </Paper>
+        {/* Empty State */}
+        {!marketData && !loading && !error && (
+          <Box textAlign="center" py={4}>
+            <TrendingUp sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+              No Data Loaded
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Select a symbol and period, then click "Load Data" to view enhanced market information
+            </Typography>
+          </Box>
+        )}
+      </CardContent>
+    </Card>
   );
 };
 

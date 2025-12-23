@@ -1,5 +1,4 @@
-# verify_file_structure.py
-# Check if all required files exist and imports work
+
 
 import os
 import sys

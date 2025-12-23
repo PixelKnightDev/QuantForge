@@ -1,7 +1,6 @@
-// frontend/src/components/DataQuality.tsx - FIXED VERSION
+
 import React, { useState } from 'react';
 import {
-  Paper,
   Typography,
   Box,
   Button,
@@ -9,11 +8,12 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Card,
-  CardContent,
   CircularProgress,
   Alert,
+  Card,
+  CardContent,
   LinearProgress,
+  Grid,
   Chip,
   List,
   ListItem,
@@ -197,13 +197,16 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
   };
 
   return (
-    <Paper sx={{ p: 3 }}>
-      <Typography variant="h5" gutterBottom>
-        🔍 Data Quality Analysis
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Comprehensive analysis of data completeness, accuracy, consistency, and timeliness
-      </Typography>
+    <Card sx={{ border: 'none' }}>
+      <CardContent sx={{ p: 3 }}>
+        <Box sx={{ mb: 2, pb: 2, borderBottom: '2px solid', borderColor: 'divider' }}>
+          <Typography variant="h5" fontWeight={700}>
+            🔍 Data Quality Analysis
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            Comprehensive analysis of data completeness, accuracy, consistency, and timeliness
+          </Typography>
+        </Box>
 
       {/* Controls */}
       <Box sx={{ 
@@ -582,7 +585,8 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
           </CardContent>
         </Card>
       )}
-    </Paper>
+      </CardContent>
+    </Card>
   );
 };
 

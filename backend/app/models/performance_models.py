@@ -1,4 +1,4 @@
-# app/models/performance_models.py
+
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Union
 from datetime import datetime, date
@@ -167,13 +167,13 @@ class PerformanceReport(BaseModel):
     
     # Configuration
     initial_capital: float = 100000.0
-    risk_free_rate: float = 0.02  # 2% default risk-free rate
+    risk_free_rate: float = 0.02 
     
 class StrategyComparison(BaseModel):
     """Compare multiple strategies"""
     strategies: List[str]
     comparison_metrics: Dict[str, Dict[str, float]]
-    rankings: Dict[str, List[str]]  # Rankings by different metrics
+    rankings: Dict[str, List[str]]  
     correlation_matrix: Dict[str, Dict[str, float]]
     efficient_frontier_data: Optional[Dict] = None
 
@@ -182,7 +182,7 @@ class PerformanceConfig(BaseModel):
     risk_free_rate: float = 0.02
     confidence_levels: List[float] = [0.90, 0.95, 0.99]
     benchmark_symbol: Optional[str] = "SPY"
-    calculation_frequency: str = "daily"  # daily, weekly, monthly
+    calculation_frequency: str = "daily" 
     include_benchmark: bool = True
     include_drawdown_analysis: bool = True
     include_monthly_breakdown: bool = True

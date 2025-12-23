@@ -1,4 +1,4 @@
-# app/models/strategy_models.py - FIXED for cross-indicator comparisons
+
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Union, Literal, Any
 from datetime import datetime
@@ -29,13 +29,13 @@ class IndicatorReference(BaseModel):
 
 class IndicatorCondition(BaseModel):
     """Single condition comparing indicator value to threshold or another indicator"""
-    indicator: str  # e.g., "rsi", "sma"
-    parameters: Dict[str, Any] = {}  # e.g., {"period": 14}
+    indicator: str  
+    parameters: Dict[str, Any] = {}  
     operator: ConditionOperator
-    value: Union[float, int, IndicatorReference]  # threshold or another indicator config
+    value: Union[float, int, IndicatorReference]  
     
     class Config:
-        # Allow arbitrary types for more flexible validation
+        
         arbitrary_types_allowed = True
 
 class StrategyRule(BaseModel):
@@ -48,7 +48,7 @@ class StrategyRule(BaseModel):
 class PositionSizing(BaseModel):
     """Position sizing configuration"""
     method: Literal["fixed_amount", "fixed_percent", "risk_percent"] = "fixed_percent"
-    value: float = 1.0  # amount, percentage, or risk percentage
+    value: float = 1.0  
     max_position_size: Optional[float] = None
 
 class RiskManagement(BaseModel):
@@ -65,8 +65,8 @@ class Strategy(BaseModel):
     rules: List[StrategyRule]
     position_sizing: PositionSizing = PositionSizing()
     risk_management: RiskManagement = RiskManagement()
-    symbols: List[str] = []  # symbols to trade
-    timeframe: str = "1d"  # data timeframe
+    symbols: List[str] = [] 
+    timeframe: str = "1d" 
     
 class Signal(BaseModel):
     """Generated trading signal"""
@@ -102,11 +102,11 @@ class Trade(BaseModel):
     pnl: float
     pnl_percent: float
     rule_name: str
-    exit_reason: str  # "signal", "stop_loss", "take_profit"
+    exit_reason: str 
 
 class Portfolio(BaseModel):
     """Portfolio state"""
-    cash: float = 100000.0  # starting cash
+    cash: float = 100000.0 
     positions: List[Position] = []
     trades: List[Trade] = []
     total_value: float = 100000.0

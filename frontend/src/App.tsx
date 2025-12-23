@@ -1,8 +1,7 @@
-// src/App.tsx - Updated for Phase 3 + WebSocket Real-time Features
+
 import React, { useState, useEffect } from 'react';
 import {
   ThemeProvider,
-  createTheme,
   CssBaseline,
   AppBar,
   Toolbar,
@@ -14,9 +13,11 @@ import {
   Tooltip,
   Tabs,
   Tab,
-  Paper,
   Badge,
-  Chip
+  Grid,
+  Card,
+  CardContent,
+  Paper
 } from '@mui/material';
 import {
   TrendingUp,
@@ -28,9 +29,7 @@ import {
   ShowChart,
   Psychology as PsychologyIcon,
   AutoGraph as AutoGraphIcon,
-  Speed as SpeedIcon,
-  Wifi,
-  WifiOff
+  Speed as SpeedIcon
 } from '@mui/icons-material';
 
 // Import existing components
@@ -51,6 +50,10 @@ import RealtimeDashboard from './components/RealtimeDashboard';
 import { apiService } from './services/apiService';
 // Import WebSocket service
 import { websocketService } from './services/websocketService';
+// Import theme
+import { getTheme } from './theme';
+// Import global styles
+import './globals.css';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -89,27 +92,8 @@ function App() {
   const [activeStrategiesCount, setActiveStrategiesCount] = useState(0);
 
   // Create theme
-  const theme = createTheme({
-    palette: {
-      mode: darkMode ? 'dark' : 'light',
-      primary: {
-        main: '#1976d2',
-      },
-      secondary: {
-        main: '#dc004e',
-      }
-    },
-    typography: {
-      h4: {
-        fontWeight: 600,
-      },
-      h6: {
-        fontWeight: 500,
-      },
-    }
-  });
+  const theme = getTheme(darkMode);
 
-// Updated WebSocket connection management for App.tsx
 useEffect(() => {
   const initializeWebSocket = async () => {
     try {
@@ -135,7 +119,7 @@ useEffect(() => {
     
     if (connected) {
       console.log('✅ WebSocket is now connected and ready for real-time features');
-      // Clear subscriptions on successful connection
+
       websocketService.clearAllSubscriptions();
       setActiveStrategiesCount(0);
     } else {
@@ -144,16 +128,15 @@ useEffect(() => {
     }
   };
 
-  // Set up WebSocket connection status handler
+
   websocketService.onConnectionStatusChange(handleConnectionStatus);
   
-  // Check if already connected, if not, try to connect
   const isAlreadyConnected = websocketService.isWebSocketConnected();
   setWsConnected(isAlreadyConnected);
   
   if (isAlreadyConnected) {
     console.log('📡 WebSocket already connected');
-    // Clear phantom subscriptions even if already connected
+
     websocketService.clearAllSubscriptions();
     setActiveStrategiesCount(0);
   } else {
@@ -183,7 +166,7 @@ useEffect(() => {
   };
 
   // Update active strategies count periodically (less frequently)
-  const interval = setInterval(updateActiveStrategies, 10000); // Every 10 seconds instead of 5
+  const interval = setInterval(updateActiveStrategies, 10000); 
 
   // Initial update
   updateActiveStrategies();
@@ -191,9 +174,9 @@ useEffect(() => {
   return () => {
     clearInterval(interval);
     console.log('🧹 Cleaning up WebSocket connection management');
-    // Note: We don't disconnect here as other components might still need it
+  
   };
-}, [apiConnected]); // IMPORTANT: Add apiConnected as dependency
+}, [apiConnected]);
 
   // Test API connection
   const testConnection = async () => {
@@ -268,7 +251,7 @@ useEffect(() => {
   const handleBacktestComplete = (results: any) => {
     console.log('🎯 Backtest completed:', results);
     setBacktestResults(results);
-    setCurrentTab(6); // Switch to Performance Dashboard
+    setCurrentTab(6); 
   };
 
   // Handle real-time strategy start
@@ -283,53 +266,68 @@ useEffect(() => {
       <CssBaseline />
       
       {/* Header */}
-      <AppBar position="static" elevation={2}>
-        <Toolbar>
-          <TrendingUp sx={{ mr: 2 }} />
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            Backtesting Platform - Real-time Edition
-          </Typography>
+      <AppBar position="static" elevation={1}>
+        <Toolbar sx={{ py: 1, px: { xs: 1, sm: 2 }, minHeight: { xs: 56, sm: 64 } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexGrow: 1, minWidth: 0 }}>
+            <TrendingUp sx={{ fontSize: { xs: 24, sm: 28 }, flexShrink: 0 }} />
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="h6" component="div" sx={{ fontWeight: 700, lineHeight: 1.2, fontSize: { xs: '0.95rem', sm: '1rem' } }}>
+                QuantForge
+              </Typography>
+              <Typography variant="caption" sx={{ opacity: 0.7, fontSize: { xs: '0.65rem', sm: '0.75rem' } }}>
+                Backtesting Platform
+              </Typography>
+            </Box>
+          </Box>
           
-          {/* Connection Status Indicators */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mr: 2 }}>
+          {/* Connection Status Indicators - Hidden on very small screens */}
+          <Box sx={{ display: { xs: 'none', sm: 'flex' }, alignItems: 'center', gap: 1.5, mr: 1 }}>
             {/* API Status */}
             <Tooltip title={`API: ${apiConnected ? 'Connected' : 'Disconnected'}`}>
-              <Chip
-                icon={<ShowChart />}
-                label="API"
-                color={apiConnected ? 'success' : 'error'}
-                size="small"
-                variant="outlined"
-              />
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Box 
+                  sx={{ 
+                    width: 8, 
+                    height: 8, 
+                    borderRadius: '50%', 
+                    backgroundColor: apiConnected ? '#10B981' : '#EF4444',
+                    animation: apiConnected ? 'pulse 2s ease-in-out infinite' : 'none'
+                  }} 
+                />
+                <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                  API
+                </Typography>
+              </Box>
             </Tooltip>
             
             {/* WebSocket Status */}
-            <Tooltip title={`WebSocket: ${wsConnected ? 'Connected' : 'Disconnected'}`}>
-              <Badge badgeContent={activeStrategiesCount} color="secondary">
-                <Chip
-                  icon={wsConnected ? <Wifi /> : <WifiOff />}
-                  label="Live"
-                  color={wsConnected ? 'success' : 'error'}
-                  size="small"
-                  variant="outlined"
+            <Tooltip title={`WebSocket: ${wsConnected ? 'Connected' : 'Disconnected'} • Active: ${activeStrategiesCount}`}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Box 
+                  sx={{ 
+                    width: 8, 
+                    height: 8, 
+                    borderRadius: '50%', 
+                    backgroundColor: wsConnected ? '#10B981' : '#EF4444',
+                    animation: wsConnected && activeStrategiesCount > 0 ? 'pulse 1s ease-in-out infinite' : 'none'
+                  }} 
                 />
-              </Badge>
+                <Typography variant="caption" sx={{ fontWeight: 500 }}>
+                  Live{activeStrategiesCount > 0 ? ` (${activeStrategiesCount})` : ''}
+                </Typography>
+              </Box>
             </Tooltip>
           </Box>
           
-          <Typography variant="body2" sx={{ mr: 2, opacity: 0.8 }}>
-            Visual Builder + Real-time Updates
-          </Typography>
-          
           <Tooltip title="Toggle dark mode">
-            <IconButton onClick={toggleDarkMode} color="inherit">
+            <IconButton onClick={toggleDarkMode} color="inherit" size="small">
               {darkMode ? <Brightness7 /> : <Brightness4 />}
             </IconButton>
           </Tooltip>
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="xl" sx={{ mt: 3, mb: 3 }}>
+      <Container maxWidth="xl" sx={{ mt: { xs: 2, sm: 3 }, mb: { xs: 2, sm: 3 }, px: { xs: 1, sm: 2 } }}>
         {/* Global Error */}
         {error && (
           <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
@@ -345,50 +343,62 @@ useEffect(() => {
         />
 
         {/* Real-time Features Announcement */}
-        <Paper 
-          elevation={3} 
-          sx={{ 
-            p: 3, 
-            mb: 4, 
-            background: wsConnected 
-              ? 'linear-gradient(135deg, #4CAF50 0%, #45a049 100%)'
-              : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white'
-          }}
-        >
-          <Typography variant="h5" gutterBottom align="center">
-            {wsConnected ? '🔴 Real-time Trading Platform' : '🚀 Advanced Backtesting Platform'}
-          </Typography>
-          <Typography variant="body1" align="center" sx={{ mb: 2 }}>
-            {wsConnected 
-              ? 'Live WebSocket connection active • Real-time strategy monitoring • Live performance updates'
-              : 'Visual Strategy Builder • Technical Indicators • Comprehensive Backtesting • Performance Analytics'
-            }
-          </Typography>
-          <Box display="flex" justifyContent="center" gap={3}>
-            <Box display="flex" alignItems="center">
-              <PsychologyIcon sx={{ mr: 1 }} />
-              <Typography variant="body2">Visual Builder</Typography>
+        <Card sx={{ mb: 4, border: 'none' }}>
+          <CardContent>
+            <Box 
+              sx={{ 
+                background: wsConnected 
+                  ? 'linear-gradient(135deg, #00e196ff 0%, #059669 100%)'
+                  : 'linear-gradient(135deg, #1E40AF 0%, #1E3A8A 100%)',
+                color: 'white',
+                p: 3,
+                borderRadius: '12px',
+                textAlign: 'center'
+              }}
+            >
+              <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
+                {wsConnected ? 'QuantForge' : 'QuantForge'}
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 2.5, opacity: 0.95 }}>
+                {wsConnected 
+                  ? 'Live WebSocket connection active • Real-time strategy monitoring • Live performance updates'
+                  : 'Visual Strategy Builder • Technical Indicators • Comprehensive Backtesting • Performance Analytics'
+                }
+              </Typography>
+              <Grid container spacing={2} justifyContent="center">
+                <Grid item xs={6} sm={3}>
+                  <Box display="flex" flexDirection="column" alignItems="center">
+                    <PsychologyIcon sx={{ mb: 1, fontSize: '24px' }} />
+                    <Typography variant="caption" sx={{ fontWeight: 500 }}>Visual Builder</Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Box display="flex" flexDirection="column" alignItems="center">
+                    <AutoGraphIcon sx={{ mb: 1, fontSize: '24px' }} />
+                    <Typography variant="caption" sx={{ fontWeight: 500 }}>Live Backtesting</Typography>
+                  </Box>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <Box display="flex" flexDirection="column" alignItems="center">
+                    <Assessment sx={{ mb: 1, fontSize: '24px' }} />
+                    <Typography variant="caption" sx={{ fontWeight: 500 }}>Performance</Typography>
+                  </Box>
+                </Grid>
+                {wsConnected && (
+                  <Grid item xs={6} sm={3}>
+                    <Box display="flex" flexDirection="column" alignItems="center">
+                      <SpeedIcon sx={{ mb: 1, fontSize: '24px' }} />
+                      <Typography variant="caption" sx={{ fontWeight: 500 }}>Real-time</Typography>
+                    </Box>
+                  </Grid>
+                )}
+              </Grid>
             </Box>
-            <Box display="flex" alignItems="center">
-              <AutoGraphIcon sx={{ mr: 1 }} />
-              <Typography variant="body2">Live Backtesting</Typography>
-            </Box>
-            <Box display="flex" alignItems="center">
-              <Assessment sx={{ mr: 1 }} />
-              <Typography variant="body2">Performance Analytics</Typography>
-            </Box>
-            {wsConnected && (
-              <Box display="flex" alignItems="center">
-                <SpeedIcon sx={{ mr: 1 }} />
-                <Typography variant="body2">Real-time Updates</Typography>
-              </Box>
-            )}
-          </Box>
-        </Paper>
+          </CardContent>
+        </Card>
 
         {/* Navigation Tabs */}
-        <Paper sx={{ mb: 3 }}>
+        <Card sx={{ mb: 3, border: 'none' }}>
           <Tabs 
             value={currentTab} 
             onChange={handleTabChange}
@@ -396,39 +406,55 @@ useEffect(() => {
             scrollButtons="auto"
             indicatorColor="primary"
             textColor="primary"
+            sx={{
+              '& .MuiTabs-root': {
+                borderBottom: 'none',
+              },
+              '& .MuiTab-root': {
+                minHeight: '56px',
+                textTransform: 'none',
+                fontWeight: 500,
+              },
+            }}
           >
             <Tab 
               icon={<ShowChart />} 
+              iconPosition="start"
               label="Market Data" 
               id="tab-0"
               aria-controls="tabpanel-0"
             />
             <Tab 
               icon={<CloudUpload />} 
+              iconPosition="start"
               label="CSV Upload" 
               id="tab-1"
               aria-controls="tabpanel-1"
             />
             <Tab 
               icon={<Download />} 
+              iconPosition="start"
               label="Bulk Download" 
               id="tab-2"
               aria-controls="tabpanel-2"
             />
             <Tab 
               icon={<Assessment />} 
+              iconPosition="start"
               label="Data Quality" 
               id="tab-3"
               aria-controls="tabpanel-3"
             />
             <Tab 
               icon={<PsychologyIcon />} 
+              iconPosition="start"
               label="Strategy Builder" 
               id="tab-4"
               aria-controls="tabpanel-4"
             />
             <Tab 
               icon={<AutoGraphIcon />} 
+              iconPosition="start"
               label="Performance" 
               id="tab-5"
               aria-controls="tabpanel-5"
@@ -439,12 +465,13 @@ useEffect(() => {
                   <SpeedIcon />
                 </Badge>
               } 
+              iconPosition="start"
               label="Real-time" 
               id="tab-6"
               aria-controls="tabpanel-6"
             />
           </Tabs>
-        </Paper>
+        </Card>
 
         {/* Tab Panels */}
         <TabPanel value={currentTab} index={0}>
@@ -549,58 +576,64 @@ useEffect(() => {
           <Alert severity="success" sx={{ mb: 3 }}>
             📊 Loaded {availableSymbols.length} symbols for analysis: {availableSymbols.slice(0, 8).join(', ')}
             {availableSymbols.length > 8 && `, +${availableSymbols.length - 8} more`}
-            {wsConnected && (
-              <> • 🔴 Real-time monitoring available</>
-            )}
+            {wsConnected }
           </Alert>
         )}
 
-        {/* Enhanced Phase Progress */}
-        <Paper elevation={1} sx={{ p: 3, mt: 4 }}>
-          <Typography variant="h6" gutterBottom>
-            🎯 Platform Capabilities
-          </Typography>
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 2 }}>
-            <Box>
-              <Typography variant="subtitle2" color="success.main" gutterBottom>
-                ✅ Data Foundation Complete
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                • FastAPI backend with comprehensive endpoints<br />
-                • Market data loading & CSV operations<br />
-                • Data quality analysis & validation<br />
-                • Bulk download & upload operations
-              </Typography>
-            </Box>
-            
-            <Box>
-              <Typography variant="subtitle2" color="success.main" gutterBottom>
-                ✅ Visual Strategy Builder Complete
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                • Drag & drop visual interface<br />
-                • 15+ technical indicators (RSI, MACD, SMA, etc.)<br />
-                • Complete backtesting engine<br />
-                • Strategy templates & examples
-              </Typography>
-            </Box>
-            
-            <Box>
-              <Typography variant="subtitle2" color={wsConnected ? "success.main" : "warning.main"} gutterBottom>
-                {wsConnected ? '✅' : '⚡'} Real-time Features {wsConnected ? 'Active' : 'Available'}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                • WebSocket real-time updates<br />
-                • Live strategy monitoring<br />
-                • Real-time performance metrics<br />
-                • Multi-strategy dashboard
-              </Typography>
-            </Box>
-          </Box>
-        </Paper>
+         {/* Enhanced Phase Progress */}
+         {/* <Card sx={{ mt: 4, border: 'none' }}>
+           <CardContent>
+             <Typography variant="h6" gutterBottom sx={{ fontWeight: 700, mb: 2.5 }}>
+               🎯 Platform Capabilities
+             </Typography>
+             <Grid container spacing={2}>
+               <Grid item xs={12} sm={6} md={4}>
+                 <Box>
+                   <Typography variant="subtitle2" color="success.main" gutterBottom sx={{ fontWeight: 600 }}>
+                     ✅ Data Foundation Complete
+                   </Typography>
+                   <Typography variant="body2" color="text.secondary">
+                     • FastAPI backend with comprehensive endpoints<br />
+                     • Market data loading & CSV operations<br />
+                     • Data quality analysis & validation<br />
+                     • Bulk download & upload operations
+                   </Typography>
+                 </Box>
+               </Grid>
+               
+               <Grid item xs={12} sm={6} md={4}>
+                 <Box>
+                   <Typography variant="subtitle2" color="success.main" gutterBottom sx={{ fontWeight: 600 }}>
+                     ✅ Visual Strategy Builder Complete
+                   </Typography>
+                   <Typography variant="body2" color="text.secondary">
+                     • Drag & drop visual interface<br />
+                     • 15+ technical indicators (RSI, MACD, SMA, etc.)<br />
+                     • Complete backtesting engine<br />
+                     • Strategy templates & examples
+                   </Typography>
+                 </Box>
+               </Grid>
+               
+               <Grid item xs={12} sm={6} md={4}>
+                 <Box>
+                   <Typography variant="subtitle2" color={wsConnected ? "success.main" : "warning.main"} gutterBottom sx={{ fontWeight: 600 }}>
+                     {wsConnected ? '✅' : '⚡'} Real-time Features {wsConnected ? 'Active' : 'Available'}
+                   </Typography>
+                   <Typography variant="body2" color="text.secondary">
+                     • WebSocket real-time updates<br />
+                     • Live strategy monitoring<br />
+                     • Real-time performance metrics<br />
+                     • Multi-strategy dashboard
+                   </Typography>
+                 </Box>
+               </Grid>
+             </Grid>
+           </CardContent>
+         </Card> */}
 
         {/* Footer */}
-        <Box sx={{ mt: 6, py: 3, textAlign: 'center' }}>
+        {/* <Box sx={{ mt: 6, py: 3, textAlign: 'center' }}>
           <Typography variant="h6" gutterBottom>
             {wsConnected 
               ? '🔴 Real-time Trading Platform Ready!' 
@@ -615,7 +648,7 @@ useEffect(() => {
             Backend: Strategy Engine + WebSocket Server • Frontend: React + TypeScript + Material-UI
             {wsConnected && ' • Live WebSocket Connection Active'}
           </Typography>
-        </Box>
+        </Box> */}
       </Container>
     </ThemeProvider>
   );

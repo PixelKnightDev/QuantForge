@@ -1129,9 +1129,6 @@ import {
   ComposedChart
 } from 'recharts';
 
-// ============================================================================
-// INTERFACES
-// ============================================================================
 interface ReturnDistributionHeatmapProps {
   trades: any[];
   portfolioValues: number[];
@@ -1194,9 +1191,7 @@ const ChartDataDebugger: React.FC<{ results: any }> = ({ results }) => {
   return null; // This component doesn't render anything
 };
 
-// ============================================================================
-// DATA VALIDATION AND FIXING FUNCTION
-// ============================================================================
+
 const validateAndFixChartData = (results: any) => {
   const trades = results?.portfolio?.trades || [];
   let portfolioValues = results?.portfolio_values || [];
@@ -1800,9 +1795,7 @@ export const PnLDistributionChart: React.FC<PnLDistributionProps> = ({ trades })
   );
 };
 
-// ============================================================================
-// 4. TRADE DURATION ANALYSIS (UNCHANGED)
-// ============================================================================
+
 export const TradeDurationAnalysisChart: React.FC<TradeDurationAnalysisProps> = ({ trades }) => {
   const durationData = useMemo(() => {
     if (trades.length === 0) return [];

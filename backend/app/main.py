@@ -1,7 +1,10 @@
-# main.py - Complete FastAPI application entry point
+
 """
 Backtesting Platform API
 Main FastAPI application that combines all routers and adds missing endpoints
+Author: pratyush yadav
+Email:pratyushyadav0106@gmail.com
+GitHub: https://github.com/pixelknightdev
 """
 
 from fastapi import FastAPI, HTTPException, Query
@@ -20,7 +23,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Create FastAPI app
+
 app = FastAPI(
     title="Backtesting Platform API",
     description="Full-stack backtesting platform with visual strategy builder",
@@ -29,7 +32,6 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Add CORS middleware for frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -48,7 +50,7 @@ app.add_middleware(
 # Import and include all routers
 try:
     from app.routers import websocket
-    app.include_router(websocket.router, tags=["websocket"])  # WebSocket router
+    app.include_router(websocket.router, tags=["websocket"]) 
     logger.info("✅ WebSocket router loaded successfully")
 except ImportError as e:
     logger.error(f"❌ Failed to load WebSocket router: {e}")
@@ -93,7 +95,7 @@ except ImportError as e:
     logger.error(f"❌ Failed to load real-time strategy router: {e}")
     logger.info("🔧 Creating complete fallback real-time router...")
     
-    # Fallback: create complete inline router for real-time functionality
+
     from fastapi import APIRouter, BackgroundTasks
     from pydantic import BaseModel
     import uuid
@@ -181,8 +183,7 @@ except ImportError as e:
             logger.error(f"❌ Error in get_active_strategies: {e}")
             import traceback
             logger.error(f"📝 Full traceback: {traceback.format_exc()}")
-            
-            # Return safe fallback response
+  
             return {
                 "active_strategies": [],
                 "total_active": 0,
@@ -334,9 +335,6 @@ except ImportError as e:
     app.include_router(realtime_router, prefix="/api/realtime", tags=["realtime"])
     logger.info("✅ Complete fallback real-time router created and loaded")
 
-# ============================================================================
-# MISSING ENDPOINT FIX: Frontend-Compatible Market Data Endpoint
-# ============================================================================
 
 @app.get("/api/market-data/{symbol}")
 async def get_market_data_frontend_compatible(
@@ -429,9 +427,6 @@ async def get_market_data_frontend_compatible(
             detail=f"Internal server error while fetching data for {symbol}: {str(e)}"
         )
 
-# ============================================================================
-# MISSING ENDPOINT FIX: Data Quality Report (Frontend Compatible)
-# ============================================================================
 
 @app.get("/api/quality-report/{symbol}")
 async def get_quality_report_frontend_compatible(
@@ -450,8 +445,7 @@ async def get_quality_report_frontend_compatible(
             raise HTTPException(status_code=400, detail="Symbol parameter is required")
         
         symbol = symbol.upper().strip()
-        
-        # Set default date range if not provided
+
         if not start_date or not end_date:
             from datetime import timedelta
             end_dt = datetime.now()
@@ -470,8 +464,7 @@ async def get_quality_report_frontend_compatible(
             
             start_date = start_dt.strftime("%Y-%m-%d")
             end_date = end_dt.strftime("%Y-%m-%d")
-        
-        # Download data for analysis using yfinance
+
         ticker = yf.Ticker(symbol)
         data = ticker.history(start=start_date, end=end_date)
         
@@ -487,7 +480,6 @@ async def get_quality_report_frontend_compatible(
         missing_data = data.isnull().sum().sum()
         duplicate_rows = data.duplicated().sum()
         
-        # Price analysis - ensure all values are valid numbers
         price_stats = {
             "mean": float(data['Close'].mean()) if pd.notna(data['Close'].mean()) else 0.0,
             "std": float(data['Close'].std()) if pd.notna(data['Close'].std()) else 0.0,
@@ -649,10 +641,6 @@ async def get_quality_report_frontend_compatible(
             detail=f"Internal server error during quality analysis for {symbol}: {str(e)}"
         )
 
-# ============================================================================
-# ROOT AND HEALTH ENDPOINTS
-# ============================================================================
-
 @app.get("/")
 async def root():
     """Root endpoint with API information"""
@@ -723,10 +711,6 @@ async def health_check():
         health_status["issues"] = failed_checks
     
     return health_status
-
-# ============================================================================
-# SIMPLIFIED QUALITY ENDPOINTS FOR FRONTEND SAFETY
-# ============================================================================
 
 @app.get("/api/quality-simple/{symbol}")
 async def get_simple_quality_report(symbol: str):
@@ -877,9 +861,7 @@ async def get_simple_quality_report(symbol: str):
             "recommendations": ["Error occurred during analysis"]
         }
 
-# ============================================================================
-# ERROR HANDLERS
-# ============================================================================
+
 
 @app.exception_handler(404)
 async def not_found_handler(request, exc):
@@ -918,9 +900,9 @@ async def internal_error_handler(request, exc):
         }
     )
 
-# ============================================================================
+
 # STARTUP EVENT
-# ============================================================================
+
 
 @app.on_event("startup")
 async def startup_event():
@@ -979,9 +961,7 @@ async def shutdown_event():
     """Application shutdown event"""
     logger.info("🛑 Shutting down Backtesting Platform API")
 
-# ============================================================================
-# DEVELOPMENT HELPERS
-# ============================================================================
+
 
 if __name__ == "__main__":
     import uvicorn

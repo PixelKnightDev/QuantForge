@@ -15,10 +15,10 @@ class DataSource(str, Enum):
 
 class DataQuality(str, Enum):
     """Data quality levels"""
-    EXCELLENT = "excellent"  # 95-100%
-    GOOD = "good"           # 80-94%
-    FAIR = "fair"           # 60-79%
-    POOR = "poor"           # Below 60%
+    EXCELLENT = "excellent" 
+    GOOD = "good"           
+    FAIR = "fair"          
+    POOR = "poor"        
 
 class CacheStatus(str, Enum):
     """Cache status for data"""
@@ -83,7 +83,7 @@ class EnhancedOHLCVData(BaseModel):
     is_anomaly: bool = Field(default=False)
     confidence_score: float = Field(default=1.0, ge=0, le=1)
     
-    # Calculated fields (computed after creation)
+    # Calculated fields
     price_change: Optional[float] = None
     price_change_percent: Optional[float] = None
     volume_ratio: Optional[float] = None  # Compared to average volume
@@ -99,7 +99,7 @@ class DataUploadRequest(BaseModel):
     # CSV specific options
     delimiter: str = ","
     date_column: str = "Date"
-    date_format: Optional[str] = None  # Auto-detect if None
+    date_format: Optional[str] = None  
     skip_rows: int = 0
     timezone: str = "UTC"
 
@@ -164,7 +164,7 @@ class DataQualityReport(BaseModel):
     
     # Accuracy metrics  
     duplicate_records: int
-    invalid_ohlc_sequences: int  # Where high < low, etc.
+    invalid_ohlc_sequences: int  
     outlier_count: int
     
     # Timeliness metrics

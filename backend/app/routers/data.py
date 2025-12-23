@@ -1,4 +1,4 @@
-# app/routers/data.py - Complete data router with all endpoints
+
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 import yfinance as yf
@@ -109,7 +109,6 @@ async def get_market_data_by_symbol(
                 detail=f"No data found for symbol {symbol}. Please check if the symbol is valid."
             )
         
-        # Convert to list format
         data_list = []
         for timestamp, row in data.iterrows():
             data_list.append({
@@ -202,7 +201,6 @@ async def validate_symbol(symbol: str):
         logger.info(f"Validating symbol: {symbol}")
         ticker = yf.Ticker(symbol)
         
-        # Try to get recent data to validate
         data = ticker.history(period="5d")
         
         if data.empty:
@@ -236,7 +234,7 @@ async def search_symbols(
 ):
     """Search for trading symbols"""
     try:
-        # Extended symbol list for searching
+
         all_symbols = [
             # Major Stocks
             "AAPL", "GOOGL", "MSFT", "TSLA", "AMZN", "META", "NVDA", "JPM", "JNJ", "V",

@@ -1,4 +1,3 @@
-# backend/app/routers/realtime_strategy.py
 from fastapi import APIRouter, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from typing import Dict, Optional
@@ -14,9 +13,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# ============================================================================
-# REQUEST/RESPONSE MODELS
-# ============================================================================
 
 class StartRealtimeStrategyRequest(BaseModel):
     strategy_name: str
@@ -40,22 +36,16 @@ class StrategyStatusResponse(BaseModel):
     active_since: Optional[str]
     trades_count: int
 
-# ============================================================================
-# STRATEGY MANAGEMENT ENDPOINTS
-# ============================================================================
-
-# REPLACE your existing @router.post("/start-realtime-strategy") with this:
 
 @router.post("/start-realtime-strategy")
 async def start_realtime_strategy_unified(
-    request: dict,  # Changed from StartRealtimeStrategyRequest to dict
+    request: dict, 
     background_tasks: BackgroundTasks
 ):
     """Start a real-time strategy (handles both Pydantic and dict requests)"""
     try:
         logger.info(f"🚀 Starting real-time strategy: {request}")
         
-        # Extract data safely from dict
         strategy_name = request.get("strategy_name", "Real-time Strategy")
         symbol = request.get("symbol", "AAPL")
         initial_capital = request.get("initial_capital", 100000)
@@ -64,10 +54,8 @@ async def start_realtime_strategy_unified(
         strategy_type = request.get("strategy_type", "visual_builder")
         parameters = request.get("parameters", {})
         
-        # Generate unique strategy ID
         strategy_id = f"rt_{strategy_type}_{uuid.uuid4().hex[:8]}"
         
-        # Build strategy configuration
         strategy_config = {
             "strategy_id": strategy_id,
             "name": strategy_name,
@@ -79,11 +67,8 @@ async def start_realtime_strategy_unified(
             "parameters": parameters,
             "created_at": datetime.now().isoformat()
         }
-        
-        # Start the real-time strategy
         await realtime_engine.start_realtime_strategy(strategy_id, strategy_config)
         
-        # Start background task for real-time data processing
         background_tasks.add_task(simulate_realtime_data_for_strategy, strategy_id)
         
         logger.info(f"✅ Started real-time strategy: {strategy_id}")
@@ -131,8 +116,6 @@ async def get_realtime_strategy_status(strategy_id: str):
             raise HTTPException(status_code=404, detail="Strategy not found")
         
         strategy_info = realtime_engine.active_strategies[strategy_id]
-        
-        # Calculate current performance
         metrics = await realtime_engine._calculate_realtime_metrics(strategy_id)
         
         return StrategyStatusResponse(
@@ -149,7 +132,7 @@ async def get_realtime_strategy_status(strategy_id: str):
         logger.error(f"❌ Error getting strategy status {strategy_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get strategy status: {str(e)}")
 
-# REPLACE your @router.get("/active-realtime-strategies") endpoint with this SAFE version:
+
 
 @router.get("/active-realtime-strategies")
 async def get_active_realtime_strategies():
@@ -234,9 +217,6 @@ async def get_active_realtime_strategies():
             "error": str(e)
         }
 
-# ============================================================================
-# DEMO/TESTING ENDPOINTS
-# ============================================================================
 
 @router.post("/start-demo-strategy")
 async def start_demo_strategy(background_tasks: BackgroundTasks):
@@ -297,8 +277,6 @@ async def trigger_demo_signal(strategy_id: str):
         logger.error(f"❌ Error triggering demo signal for {strategy_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to trigger demo signal: {str(e)}")
 
-# ADD THESE ENDPOINTS TO YOUR app/routers/realtime_strategy.py FILE
-# (Add them right after your existing endpoints, before the background tasks section)
 
 @router.post("/deploy-strategy")
 async def deploy_strategy(request: dict):
@@ -306,7 +284,6 @@ async def deploy_strategy(request: dict):
     try:
         logger.info(f"🚀 Deploying visual strategy: {request}")
         
-        # Extract strategy configuration from visual builder
         strategy_name = request.get("name", "Visual Strategy")
         symbol = request.get("symbol", "AAPL")
         initial_capital = request.get("initial_capital", 100000)
@@ -330,7 +307,6 @@ async def deploy_strategy(request: dict):
             "created_at": datetime.now().isoformat()
         }
         
-        # Start the real-time strategy via the engine
         await realtime_engine.start_realtime_strategy(strategy_id, strategy_config)
         
         logger.info(f"✅ Deployed visual strategy: {strategy_id} - {strategy_name}")
@@ -365,7 +341,6 @@ async def start_realtime_strategy_dict(request: dict):
     try:
         logger.info(f"🚀 Starting strategy from dict: {request}")
         
-        # Convert dict to StartRealtimeStrategyRequest format
         strategy_request = StartRealtimeStrategyRequest(
             strategy_name=request.get("strategy_name", "Real-time Strategy"),
             symbol=request.get("symbol", "AAPL"),
@@ -414,11 +389,6 @@ async def debug_strategies():
             "router_status": "real_router_with_error",
             "timestamp": datetime.now().isoformat()
         }
-
-
-# ============================================================================
-# BACKGROUND TASKS
-# ============================================================================
 
 async def simulate_realtime_data_for_strategy(strategy_id: str):
     """
@@ -469,10 +439,6 @@ async def simulate_realtime_data_for_strategy(strategy_id: str):
     finally:
         logger.info(f"🛑 Stopped real-time data simulation for strategy: {strategy_id}")
 
-# ============================================================================
-# MARKET DATA SIMULATION ENDPOINT
-# ============================================================================
-
 @router.post("/start-market-data-simulation")
 async def start_market_data_simulation(background_tasks: BackgroundTasks):
     """
@@ -489,8 +455,6 @@ async def start_market_data_simulation(background_tasks: BackgroundTasks):
                 status_code=400, 
                 detail="No active strategies found. Start a strategy first."
             )
-        
-        # Start simulation for each active strategy
         for strategy_id, strategy_info in realtime_engine.active_strategies.items():
             if strategy_info["status"] == "active":
                 background_tasks.add_task(simulate_realtime_data_for_strategy, strategy_id)
@@ -507,9 +471,6 @@ async def start_market_data_simulation(background_tasks: BackgroundTasks):
         logger.error(f"❌ Error starting market data simulation: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to start simulation: {str(e)}")
 
-# ============================================================================
-# STRATEGY CONFIGURATION ENDPOINTS
-# ============================================================================
 
 @router.get("/strategy-templates")
 async def get_strategy_templates():
@@ -610,9 +571,6 @@ async def validate_strategy_config(request: StartRealtimeStrategyRequest):
         logger.error(f"❌ Error validating strategy config: {e}")
         raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
 
-# ============================================================================
-# PERFORMANCE ANALYTICS ENDPOINTS
-# ============================================================================
 
 @router.get("/realtime-performance-summary")
 async def get_realtime_performance_summary():
@@ -669,9 +627,8 @@ async def get_realtime_performance_summary():
         logger.error(f"❌ Error getting performance summary: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get performance summary: {str(e)}")
 
-# ============================================================================
+
 # HEALTH CHECK ENDPOINT
-# ============================================================================
 
 @router.get("/realtime-engine-health")
 async def get_realtime_engine_health():

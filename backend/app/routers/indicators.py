@@ -1,5 +1,4 @@
-# backend/app/routers/indicators.py
-# Phase 3: Technical Indicators API Endpoints - FIXED VERSION
+
 
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks, Request
 from fastapi.responses import JSONResponse
@@ -18,9 +17,7 @@ from app.services.technical_indicators import TechnicalIndicators, IndicatorResu
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# =============================================================================
-# REQUEST/RESPONSE MODELS
-# =============================================================================
+
 
 class IndicatorRequest(BaseModel):
     """Request model for calculating indicators"""
@@ -45,7 +42,7 @@ class IndicatorResponse(BaseModel):
     parameters: Dict[str, Any]
     data_points: int
     calculation_time: str
-    values: Dict[str, Any]  # Can be single series or multiple series
+    values: Dict[str, Any]  
     metadata: Dict[str, Any]
 
 class MultiIndicatorRequest(BaseModel):
@@ -65,12 +62,7 @@ class BulkIndicatorRequest(BaseModel):
     interval: str = Field(default="1d")
     source: DataSource = Field(default=DataSource.YAHOO_FINANCE)
 
-# =============================================================================
-# UTILITY FUNCTIONS
-# =============================================================================
 
-# REPLACEMENT for the get_market_data_for_indicators function in your app/routers/indicators.py
-# Replace lines approximately 65-120 in your indicators.py file
 
 async def get_market_data_for_indicators(symbol: str, period: str, interval: str, 
                                         source: DataSource) -> Dict[str, pd.Series]:
@@ -78,8 +70,7 @@ async def get_market_data_for_indicators(symbol: str, period: str, interval: str
     try:
         logger.info(f"🔄 Fetching market data for {symbol} (period={period}, interval={interval}, source={source})")
         
-        # FIXED: Use the working enhanced_data_service.download_data method directly
-        # This calls the same service that powers /api/market-data/{symbol}
+
         data = await enhanced_data_service.download_data(
             symbol=symbol,
             source=source,
@@ -95,11 +86,10 @@ async def get_market_data_for_indicators(symbol: str, period: str, interval: str
             logger.error(f"No data returned for {symbol} from {source}")
             raise ValueError(f"No market data available for {symbol}. Please try a different symbol or check if {symbol} is a valid ticker.")
         
-        # Convert List[EnhancedOHLCVData] to pandas DataFrame
         df_data = []
         for point in data:
             try:
-                # Validate the data point has required fields
+
                 if not hasattr(point, 'close') or point.close is None or point.close <= 0:
                     logger.debug(f"Skipping invalid data point: close={getattr(point, 'close', 'missing')}")
                     continue
@@ -150,7 +140,6 @@ async def get_market_data_for_indicators(symbol: str, period: str, interval: str
         return series_data
         
     except ValueError as e:
-        # Re-raise ValueError with original message
         logger.error(f"❌ Data validation error for {symbol}: {e}")
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -179,7 +168,6 @@ def format_indicator_response(symbol: str, indicator_name: str, result: Any,
         else:
             values = {'values': result, 'type': 'raw'}
         
-        # Calculate some basic statistics
         if isinstance(result, pd.Series):
             stats = {
                 'count': int(result.count()),
@@ -223,7 +211,6 @@ def extract_typed_parameters(query_params: Dict[str, str],
     """Extract and type-cast parameters from query string with flexible mapping"""
     typed_parameters = {}
     
-    # Common parameter aliases
     param_aliases = {
         'period': ['period', 'rsi_period', 'sma_period', 'ema_period', 'bb_period'],
         'fast_period': ['fast_period', 'fast'],
@@ -280,10 +267,6 @@ def _convert_param_type(value: str, param_type: str, param_name: str) -> Any:
             status_code=400,
             detail=f"Invalid type for parameter {param_name}: expected {param_type}, got '{value}'"
         )
-
-# =============================================================================
-# API ENDPOINTS
-# =============================================================================
 
 @router.get("/available")
 async def get_available_indicators():
@@ -362,8 +345,6 @@ async def calculate_indicator(request: IndicatorRequest):
 
 @router.get("/calculate/{symbol}/{indicator}")
 
-# REPLACEMENT for the calculate_indicator_simple function in your app/routers/indicators.py
-# Replace lines approximately 320-420 in your indicators.py file
 
 @router.get("/calculate/{symbol}/{indicator}")
 async def calculate_indicator_simple(
@@ -386,8 +367,6 @@ async def calculate_indicator_simple(
         query_params = dict(request.query_params)
         logger.info(f"📋 All query parameters: {query_params}")
         
-        # FIXED: Remove standard parameters we already captured
-        # Don't remove 'period' from indicator params since it might be an indicator parameter
         standard_params = {'interval', 'source'}
         indicator_query_params = {k: v for k, v in query_params.items() if k not in standard_params}
         logger.info(f"🔧 Indicator-specific parameters: {indicator_query_params}")
@@ -450,7 +429,6 @@ async def calculate_indicator_simple(
                 try:
                     # If it's a number, treat it as indicator period
                     ma_period = int(period_value)
-                    # Override data_period to default since user meant indicator period
                     data_period = "1y"
                     logger.info(f"🔧 Detected numeric period {ma_period} as {indicator.upper()} period, using default data period: {data_period}")
                 except ValueError:
@@ -477,7 +455,6 @@ async def calculate_indicator_simple(
             if 'bb_period' in indicator_query_params:
                 bb_period = int(indicator_query_params['bb_period'])
             elif 'period' in indicator_query_params:
-                # FIXED: Check if it's a numeric value (indicator period) vs data period format
                 period_value = indicator_query_params['period']
                 try:
                     # If it's a number, treat it as indicator period
@@ -513,7 +490,7 @@ async def calculate_indicator_simple(
             symbol=symbol,
             indicator=indicator,
             parameters=indicator_params,
-            period=data_period,  # FIXED: Use the correct data period
+            period=data_period,
             interval=interval,
             source=source
         )
@@ -587,7 +564,7 @@ async def test_indicator_with_sample_data(indicator: str):
         
         # Generate realistic price data
         base_price = 100
-        returns = np.random.normal(0.001, 0.02, 100)  # Daily returns
+        returns = np.random.normal(0.001, 0.02, 100)
         prices = [base_price]
         
         for ret in returns:

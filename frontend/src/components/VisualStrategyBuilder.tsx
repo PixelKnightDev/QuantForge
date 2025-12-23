@@ -1,4 +1,4 @@
-// src/components/VisualStrategyBuilder.tsx - Fixed with required props
+
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -18,28 +18,20 @@ import {
   Snackbar,
   Stack,
   CircularProgress,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   Grid,
   Divider,
-  IconButton,
-  Tooltip,
-  LinearProgress
+  IconButton
 } from '@mui/material';
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
   PlayArrow as PlayIcon,
-  Save as SaveIcon,
-  ExpandMore as ExpandMoreIcon,
   Psychology as PsychologyIcon,
   TrendingUp as TrendingUpIcon,
-  Settings as SettingsIcon,
   Info as InfoIcon,
   DragIndicator as DragIcon,
   CheckCircle as CheckCircleIcon,
@@ -161,14 +153,14 @@ const ConditionBuilder: React.FC<{
   const selectedIndicator = indicators.find(ind => ind.name === condition.indicator);
 
   return (
-    <Card variant="outlined" sx={{ mb: 2, p: 2 }}>
-      <Box display="flex" alignItems="center" gap={2} mb={2}>
-        <DragIcon color="action" />
-        <Typography variant="subtitle2" fontWeight="bold" flex={1}>
+    <Card variant="outlined" sx={{ mb: 2, p: 2, borderColor: 'divider', '&:hover': { borderColor: 'primary.main', boxShadow: 1 } }}>
+      <Box display="flex" alignItems="center" gap={1.5} mb={2}>
+        <DragIcon color="action" sx={{ fontSize: 20 }} />
+        <Typography variant="body2" fontWeight={600} flex={1} color="text.secondary">
           Condition
         </Typography>
         <IconButton size="small" onClick={onDelete} color="error">
-          <DeleteIcon />
+          <DeleteIcon sx={{ fontSize: 18 }} />
         </IconButton>
       </Box>
 
@@ -693,7 +685,6 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({
 
       console.log('📋 Real-time strategy payload:', realtimePayload);
 
-      // FIX: Use absolute URL to backend port 8000, not relative URL
       const response = await fetch('http://localhost:8000/api/realtime/start-realtime-strategy', {
         method: 'POST',
         headers: {
@@ -739,59 +730,72 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({
   return (
     <Box>
       {/* Header */}
-      <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
-        <Box display="flex" alignItems="center" justifyContent="space-between">
-          <Box display="flex" alignItems="center" gap={2}>
-            <PsychologyIcon color="primary" sx={{ fontSize: 32 }} />
-            <Box>
-              <Typography variant="h4" fontWeight="bold">
-                Visual Strategy Builder
-              </Typography>
-              <Typography variant="body1" color="text.secondary">
-                Drag, drop, and configure your trading strategy visually
-              </Typography>
+      <Card sx={{ mb: 3, border: 'none' }}>
+        <CardContent sx={{ p: 3 }}>
+          <Box display="flex" alignItems="center" justifyContent="space-between" gap={2} sx={{ flexWrap: 'wrap' }}>
+            <Box display="flex" alignItems="center" gap={2}>
+              <Box
+                sx={{
+                  p: 1.5,
+                  borderRadius: '12px',
+                  background: 'linear-gradient(135deg, #1E40AF 0%, #3B82F6 100%)',
+                  color: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <PsychologyIcon sx={{ fontSize: 28 }} />
+              </Box>
+              <Box>
+                <Typography variant="h5" fontWeight={700}>
+                  Visual Strategy Builder
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  Design, test, and deploy trading strategies
+                </Typography>
+              </Box>
             </Box>
+            
+            <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+              <Button
+                variant="outlined"
+                startIcon={<InfoIcon />}
+                onClick={() => setExamplesDialog(true)}
+                size="small"
+              >
+                Examples
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={testing ? <CircularProgress size={16} /> : <TrendingUpIcon />}
+                onClick={testStrategy}
+                disabled={testing || !isStrategyValid}
+                size="small"
+              >
+                {testing ? 'Testing...' : 'Test'}
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={backtesting ? <CircularProgress size={16} /> : <PlayIcon />}
+                onClick={runBacktest}
+                disabled={backtesting || !isStrategyValid}
+              >
+                {backtesting ? 'Running...' : 'Backtest'}
+              </Button>
+              <Button
+                variant="contained"
+                color="error"
+                startIcon={deploying ? <CircularProgress size={16} /> : <SpeedIcon />}
+                onClick={deployRealtimeStrategy}
+                disabled={deploying || !isStrategyValid}
+              >
+                {deploying ? 'Deploying...' : 'Deploy Live'}
+              </Button>
+            </Stack>
           </Box>
-          
-          <Stack direction="row" spacing={2}>
-            <Button
-              variant="outlined"
-              startIcon={<InfoIcon />}
-              onClick={() => setExamplesDialog(true)}
-            >
-              Examples
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={testing ? <CircularProgress size={20} /> : <TrendingUpIcon />}
-              onClick={testStrategy}
-              disabled={testing || !isStrategyValid}
-            >
-              {testing ? 'Testing...' : 'Test Strategy'}
-            </Button>
-            <Button
-              variant="contained"
-              startIcon={backtesting ? <CircularProgress size={20} /> : <PlayIcon />}
-              onClick={runBacktest}
-              disabled={backtesting || !isStrategyValid}
-              size="large"
-            >
-              {backtesting ? 'Running...' : 'Run Backtest'}
-            </Button>
-            {/* NEW: Real-time deployment button */}
-            <Button
-              variant="contained"
-              color="error"
-              startIcon={deploying ? <CircularProgress size={20} /> : <SpeedIcon />}
-              onClick={deployRealtimeStrategy}
-              disabled={deploying || !isStrategyValid}
-              size="large"
-            >
-              {deploying ? 'Deploying...' : 'Deploy Live'}
-            </Button>
-          </Stack>
-        </Box>
-      </Paper>
+        </CardContent>
+      </Card>
 
       {loading && (
         <Box display="flex" justifyContent="center" mb={3}>
@@ -800,318 +804,389 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({
       )}
 
       <Grid container spacing={3}>
-        {/* Left Panel - Strategy Configuration */}
-        <Grid item xs={12} lg={8}>
-          {/* Strategy Info */}
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom fontWeight="bold">
-              Strategy Configuration
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  label="Strategy Name"
-                  fullWidth
-                  value={strategy.name}
-                  onChange={(e) => setStrategy({ ...strategy, name: e.target.value })}
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Timeframe</InputLabel>
-                  <Select
-                    value={strategy.timeframe || '1d'}
-                    onChange={(e) => setStrategy({ ...strategy, timeframe: e.target.value })}
-                    label="Timeframe"
-                  >
-                    <MenuItem value="1d">1 Day</MenuItem>
-                    <MenuItem value="1h">1 Hour</MenuItem>
-                    <MenuItem value="4h">4 Hours</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  label="Description"
-                  fullWidth
-                  multiline
-                  rows={2}
-                  value={strategy.description}
-                  onChange={(e) => setStrategy({ ...strategy, description: e.target.value })}
-                />
-              </Grid>
-            </Grid>
-          </Paper>
+         {/* Left Panel - Strategy Configuration */}
+         <Grid item xs={12} lg={8}>
+           {/* Strategy Info */}
+           <Card sx={{ mb: 3, border: 'none' }}>
+             <CardContent sx={{ p: 3 }}>
+               <Box sx={{ mb: 2, pb: 2, borderBottom: '2px solid', borderColor: 'divider' }}>
+                 <Typography variant="h6" fontWeight={700}>
+                   📋 Strategy Configuration
+                 </Typography>
+               </Box>
+               <Grid container spacing={2.5}>
+                 <Grid item xs={12} md={6}>
+                   <TextField
+                     label="Strategy Name"
+                     placeholder="e.g., Golden Cross Strategy"
+                     fullWidth
+                     size="small"
+                     value={strategy.name}
+                     onChange={(e) => setStrategy({ ...strategy, name: e.target.value })}
+                   />
+                 </Grid>
+                 <Grid item xs={12} md={6}>
+                   <FormControl fullWidth size="small">
+                     <InputLabel>Timeframe</InputLabel>
+                     <Select
+                       value={strategy.timeframe || '1d'}
+                       onChange={(e) => setStrategy({ ...strategy, timeframe: e.target.value })}
+                       label="Timeframe"
+                     >
+                       <MenuItem value="1d">1 Day</MenuItem>
+                       <MenuItem value="1h">1 Hour</MenuItem>
+                       <MenuItem value="4h">4 Hours</MenuItem>
+                     </Select>
+                   </FormControl>
+                 </Grid>
+                 <Grid item xs={12}>
+                   <TextField
+                     label="Description"
+                     placeholder="Describe your strategy..."
+                     fullWidth
+                     multiline
+                     rows={2}
+                     size="small"
+                     value={strategy.description}
+                     onChange={(e) => setStrategy({ ...strategy, description: e.target.value })}
+                   />
+                 </Grid>
+               </Grid>
+             </CardContent>
+           </Card>
 
-          {/* Rules Section */}
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Box display="flex" alignItems="center" justifyContent="between" mb={2}>
-              <Typography variant="h6" fontWeight="bold" flex={1}>
-                Trading Rules ({strategy.rules.length})
-              </Typography>
-              <Stack direction="row" spacing={1}>
-                <Button
-                  startIcon={<AddIcon />}
-                  onClick={() => addRule('buy')}
-                  variant="contained"
-                  color="success"
-                  size="small"
-                >
-                  Add Buy Rule
-                </Button>
-                <Button
-                  startIcon={<AddIcon />}
-                  onClick={() => addRule('sell')}
-                  variant="contained"
-                  color="error"
-                  size="small"
-                >
-                  Add Sell Rule
-                </Button>
-              </Stack>
-            </Box>
+           {/* Rules Section */}
+           <Card sx={{ mb: 3, border: 'none' }}>
+             <CardContent sx={{ p: 3 }}>
+               <Box display="flex" alignItems="center" justifyContent="space-between" mb={2.5} sx={{ flexWrap: 'wrap', gap: 2 }}>
+                 <Box>
+                   <Typography variant="h6" fontWeight={700}>
+                     ⚙️ Trading Rules
+                   </Typography>
+                   <Typography variant="caption" color="text.secondary">
+                     {strategy.rules.length} rule{strategy.rules.length !== 1 ? 's' : ''} configured
+                   </Typography>
+                 </Box>
+                 <Stack direction="row" spacing={1}>
+                   <Button
+                     startIcon={<AddIcon />}
+                     onClick={() => addRule('buy')}
+                     variant="contained"
+                     color="success"
+                     size="small"
+                   >
+                     Buy Rule
+                   </Button>
+                   <Button
+                     startIcon={<AddIcon />}
+                     onClick={() => addRule('sell')}
+                     variant="contained"
+                     color="error"
+                     size="small"
+                   >
+                     Sell Rule
+                   </Button>
+                 </Stack>
+               </Box>
 
-            {strategy.rules.length === 0 ? (
-              <Alert severity="info" sx={{ my: 2 }}>
-                <Typography variant="subtitle2" fontWeight="bold">
-                  No rules defined yet
-                </Typography>
-                <Typography variant="body2">
-                  Add buy and sell rules to define your trading strategy. Each rule can have multiple conditions.
-                </Typography>
-              </Alert>
-            ) : (
-              strategy.rules.map((rule, index) => (
-                <RuleBuilder
-                  key={index}
-                  rule={rule}
-                  indicators={indicators}
-                  operators={operators}
-                  onChange={(updated) => updateRule(index, updated)}
-                  onDelete={() => deleteRule(index)}
-                />
-              ))
-            )}
-          </Paper>
+               {strategy.rules.length === 0 ? (
+                 <Alert severity="info" sx={{ my: 2 }}>
+                   <Typography variant="subtitle2" fontWeight={600}>
+                     No rules defined yet
+                   </Typography>
+                   <Typography variant="body2" sx={{ mt: 0.5 }}>
+                     Add buy and sell rules to define your trading strategy. Each rule can have multiple conditions linked together.
+                   </Typography>
+                 </Alert>
+               ) : (
+                 <Box sx={{ mt: 2 }}>
+                   {strategy.rules.map((rule, index) => (
+                     <Box key={index} sx={{ mb: 2 }}>
+                       <RuleBuilder
+                         rule={rule}
+                         indicators={indicators}
+                         operators={operators}
+                         onChange={(updated) => updateRule(index, updated)}
+                         onDelete={() => deleteRule(index)}
+                       />
+                     </Box>
+                   ))}
+                 </Box>
+               )}
+             </CardContent>
+           </Card>
 
-          {/* Risk Management */}
-          <Accordion>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <SettingsIcon sx={{ mr: 1 }} />
-              <Typography variant="h6" fontWeight="bold">
-                Risk Management & Position Sizing
-              </Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    label="Position Size"
-                    type="number"
-                    fullWidth
-                    value={strategy.position_sizing.value}
-                    onChange={(e) => setStrategy({
-                      ...strategy,
-                      position_sizing: {
-                        ...strategy.position_sizing,
-                        value: parseFloat(e.target.value) || 0
-                      }
-                    })}
-                    helperText="Amount to invest per trade"
-                  />
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Sizing Method</InputLabel>
-                    <Select
-                      value={strategy.position_sizing.method}
-                      onChange={(e) => setStrategy({
-                        ...strategy,
-                        position_sizing: {
-                          ...strategy.position_sizing,
-                          method: e.target.value
-                        }
-                      })}
-                      label="Sizing Method"
-                    >
-                      <MenuItem value="fixed_amount">Fixed Amount ($)</MenuItem>
-                      <MenuItem value="fixed_percent">Fixed Percent (%)</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Stop Loss %"
-                    type="number"
-                    fullWidth
-                    value={strategy.risk_management.stop_loss_percent || ''}
-                    onChange={(e) => setStrategy({
-                      ...strategy,
-                      risk_management: {
-                        ...strategy.risk_management,
-                        stop_loss_percent: parseFloat(e.target.value) || undefined
-                      }
-                    })}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Take Profit %"
-                    type="number"
-                    fullWidth
-                    value={strategy.risk_management.take_profit_percent || ''}
-                    onChange={(e) => setStrategy({
-                      ...strategy,
-                      risk_management: {
-                        ...strategy.risk_management,
-                        take_profit_percent: parseFloat(e.target.value) || undefined
-                      }
-                    })}
-                  />
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <TextField
-                    label="Max Positions"
-                    type="number"
-                    fullWidth
-                    value={strategy.risk_management.max_positions || 1}
-                    onChange={(e) => setStrategy({
-                      ...strategy,
-                      risk_management: {
-                        ...strategy.risk_management,
-                        max_positions: parseInt(e.target.value) || 1
-                      }
-                    })}
-                  />
-                </Grid>
-              </Grid>
-            </AccordionDetails>
-          </Accordion>
+           {/* Risk Management */}
+           <Card sx={{ border: 'none' }}>
+             <CardContent sx={{ p: 3 }}>
+               <Box sx={{ mb: 2, pb: 2, borderBottom: '2px solid', borderColor: 'divider' }}>
+                 <Typography variant="h6" fontWeight={700}>
+                   🛡️ Risk Management & Position Sizing
+                 </Typography>
+               </Box>
+               <Grid container spacing={2.5}>
+                 <Grid item xs={12} md={6}>
+                   <TextField
+                     label="Position Size"
+                     type="number"
+                     fullWidth
+                     size="small"
+                     value={strategy.position_sizing.value}
+                     onChange={(e) => setStrategy({
+                       ...strategy,
+                       position_sizing: {
+                         ...strategy.position_sizing,
+                         value: parseFloat(e.target.value) || 0
+                       }
+                     })}
+                     helperText="Amount to invest per trade"
+                   />
+                 </Grid>
+                 <Grid item xs={12} md={6}>
+                   <FormControl fullWidth size="small">
+                     <InputLabel>Sizing Method</InputLabel>
+                     <Select
+                       value={strategy.position_sizing.method}
+                       onChange={(e) => setStrategy({
+                         ...strategy,
+                         position_sizing: {
+                           ...strategy.position_sizing,
+                           method: e.target.value
+                         }
+                       })}
+                       label="Sizing Method"
+                     >
+                       <MenuItem value="fixed_amount">Fixed Amount ($)</MenuItem>
+                       <MenuItem value="fixed_percent">Fixed Percent (%)</MenuItem>
+                     </Select>
+                   </FormControl>
+                 </Grid>
+                 <Grid item xs={12} md={4}>
+                   <TextField
+                     label="Stop Loss %"
+                     type="number"
+                     fullWidth
+                     size="small"
+                     value={strategy.risk_management.stop_loss_percent || ''}
+                     onChange={(e) => setStrategy({
+                       ...strategy,
+                       risk_management: {
+                         ...strategy.risk_management,
+                         stop_loss_percent: parseFloat(e.target.value) || undefined
+                       }
+                     })}
+                   />
+                 </Grid>
+                 <Grid item xs={12} md={4}>
+                   <TextField
+                     label="Take Profit %"
+                     type="number"
+                     fullWidth
+                     size="small"
+                     value={strategy.risk_management.take_profit_percent || ''}
+                     onChange={(e) => setStrategy({
+                       ...strategy,
+                       risk_management: {
+                         ...strategy.risk_management,
+                         take_profit_percent: parseFloat(e.target.value) || undefined
+                       }
+                     })}
+                   />
+                 </Grid>
+                 <Grid item xs={12} md={4}>
+                   <TextField
+                     label="Max Positions"
+                     type="number"
+                     fullWidth
+                     size="small"
+                     value={strategy.risk_management.max_positions || 1}
+                     onChange={(e) => setStrategy({
+                       ...strategy,
+                       risk_management: {
+                         ...strategy.risk_management,
+                         max_positions: parseInt(e.target.value) || 1
+                       }
+                     })}
+                   />
+                 </Grid>
+               </Grid>
+             </CardContent>
+           </Card>
         </Grid>
 
-        {/* Right Panel - Testing & Results */}
-        <Grid item xs={12} lg={4}>
-          {/* Test Configuration */}
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom fontWeight="bold">
-              Backtest Configuration
-            </Typography>
-            <Stack spacing={2}>
-              <FormControl fullWidth>
-                <InputLabel>Symbol</InputLabel>
-                <Select
-                  value={selectedSymbol}
-                  onChange={(e) => setSelectedSymbol(e.target.value)}
-                  label="Symbol"
-                >
-                  {availableSymbols.map(symbol => (
-                    <MenuItem key={symbol} value={symbol}>{symbol}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+         {/* Right Panel - Testing & Results */}
+         <Grid item xs={12} lg={4}>
+           {/* Test Configuration */}
+           <Card sx={{ mb: 3, border: 'none' }}>
+             <CardContent sx={{ p: 3 }}>
+               <Box sx={{ mb: 2, pb: 2, borderBottom: '2px solid', borderColor: 'divider' }}>
+                 <Typography variant="h6" fontWeight={700}>
+                   📊 Backtest Configuration
+                 </Typography>
+               </Box>
+               <Stack spacing={2}>
+                 <FormControl fullWidth size="small">
+                   <InputLabel>Symbol</InputLabel>
+                   <Select
+                     value={selectedSymbol}
+                     onChange={(e) => setSelectedSymbol(e.target.value)}
+                     label="Symbol"
+                   >
+                     {availableSymbols.map(symbol => (
+                       <MenuItem key={symbol} value={symbol}>{symbol}</MenuItem>
+                     ))}
+                   </Select>
+                 </FormControl>
 
-              <TextField
-                label="Start Date"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
+                 <TextField
+                   label="Start Date"
+                   type="date"
+                   fullWidth
+                   size="small"
+                   value={startDate}
+                   onChange={(e) => setStartDate(e.target.value)}
+                   InputLabelProps={{ shrink: true }}
+                 />
 
-              <TextField
-                label="End Date"
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Stack>
-          </Paper>
+                 <TextField
+                   label="End Date"
+                   type="date"
+                   fullWidth
+                   size="small"
+                   value={endDate}
+                   onChange={(e) => setEndDate(e.target.value)}
+                   InputLabelProps={{ shrink: true }}
+                 />
+               </Stack>
+             </CardContent>
+           </Card>
 
-          {/* Strategy Status */}
-          <Paper sx={{ p: 3, mb: 3 }}>
-            <Typography variant="h6" gutterBottom fontWeight="bold">
-              Strategy Status
-            </Typography>
-            
-            <Box display="flex" alignItems="center" gap={1} mb={2}>
-              {isStrategyValid ? (
-                <CheckCircleIcon color="success" />
-              ) : (
-                <ErrorIcon color="error" />
-              )}
-              <Typography color={isStrategyValid ? 'success.main' : 'error.main'}>
-                {isStrategyValid ? 'Strategy Ready' : 'Strategy Incomplete'}
-              </Typography>
-            </Box>
+           {/* Strategy Status */}
+           <Card 
+             sx={{ 
+               mb: 3, 
+               border: 'none',
+               background: isStrategyValid 
+                 ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%)'
+                 : 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%)'
+             }}
+           >
+             <CardContent sx={{ p: 3 }}>
+               <Box sx={{ mb: 2, pb: 2, borderBottom: '2px solid', borderColor: 'divider' }}>
+                 <Typography variant="h6" fontWeight={700}>
+                   ✓ Strategy Status
+                 </Typography>
+               </Box>
+               
+               <Box display="flex" alignItems="center" gap={1.5} mb={2}>
+                 {isStrategyValid ? (
+                   <CheckCircleIcon color="success" sx={{ fontSize: 28 }} />
+                 ) : (
+                   <ErrorIcon color="error" sx={{ fontSize: 28 }} />
+                 )}
+                 <Typography variant="subtitle2" fontWeight={600} color={isStrategyValid ? 'success.main' : 'error.main'}>
+                   {isStrategyValid ? '✅ Strategy Ready' : '⚠️ Strategy Incomplete'}
+                 </Typography>
+               </Box>
 
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Rules: {strategy.rules.length}<br />
-              Conditions: {strategy.rules.reduce((sum, rule) => sum + rule.conditions.length, 0)}<br />
-              Indicators: {indicators.length} available
-            </Typography>
+               <Box sx={{ backgroundColor: 'background.paper', p: 1.5, borderRadius: 1, mb: 2 }}>
+                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                   <strong>Rules:</strong> {strategy.rules.length}
+                 </Typography>
+                 <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                   <strong>Conditions:</strong> {strategy.rules.reduce((sum, rule) => sum + rule.conditions.length, 0)}
+                 </Typography>
+                 <Typography variant="caption" color="text.secondary">
+                   <strong>Indicators:</strong> {indicators.length} available
+                 </Typography>
+               </Box>
 
-            {/* NEW: Deployment Options */}
-            {isStrategyValid && (
-              <Box mt={2}>
-                <Divider sx={{ my: 1 }} />
-                <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-                  🚀 Deployment Options
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  • Run Backtest → View Performance Dashboard<br />
-                  • Deploy Live → Real-time Strategy Monitoring
-                </Typography>
-              </Box>
-            )}
-          </Paper>
+               {/* NEW: Deployment Options */}
+               {isStrategyValid && (
+                 <Box>
+                   <Divider sx={{ my: 1.5 }} />
+                   <Typography variant="body2" fontWeight={600} gutterBottom sx={{ mt: 1.5 }}>
+                     🚀 Deployment Options
+                   </Typography>
+                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.6 }}>
+                     • Run Backtest → View Performance Dashboard<br />
+                     • Deploy Live → Real-time Strategy Monitoring
+                   </Typography>
+                 </Box>
+               )}
+             </CardContent>
+           </Card>
 
-          {/* Results */}
-          {results && (
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom fontWeight="bold">
-                {results.enhanced_analytics ? '📊 Enhanced Backtest Results' : 'Basic Backtest Results'}
-              </Typography>
-              
-              {/* Enhanced Quick Summary Cards */}
-              <Grid container spacing={2} mb={3}>
-                <Grid item xs={6} md={3}>
-                  <Box textAlign="center" p={2} bgcolor="primary.50" borderRadius={1}>
-                    <Typography variant="h6" color="primary.main" fontWeight="bold">
-                      {results.summary.total_return.toFixed(2)}%
-                    </Typography>
-                    <Typography variant="caption">Total Return</Typography>
-                  </Box>
-                </Grid>
-                <Grid item xs={6} md={3}>
-                  <Box textAlign="center" p={2} bgcolor="success.50" borderRadius={1}>
-                    <Typography variant="h6" color="success.main" fontWeight="bold">
-                      {results.summary.total_trades}
-                    </Typography>
-                    <Typography variant="caption">Total Trades</Typography>
-                  </Box>
-                </Grid>
-                {results.enhanced_analytics && (
-                  <>
-                  <Grid item xs={6} md={3}>
-                    <Box textAlign="center" p={2} bgcolor="info.50" borderRadius={1}>
-                      <Typography variant="h6" color="info.main" fontWeight="bold">
-                        {results.summary.sharpe_ratio?.toFixed(2) || 'N/A'}
-                      </Typography>
-                      <Typography variant="caption">Sharpe Ratio</Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={6} md={3}>
-                    <Box textAlign="center" p={2} bgcolor="warning.50" borderRadius={1}>
-                      <Typography variant="h6" color="warning.main" fontWeight="bold">
-                        {results.summary.max_drawdown?.toFixed(2) || 'N/A'}%
-                      </Typography>
-                      <Typography variant="caption">Max Drawdown</Typography>
-                    </Box>
-                  </Grid>
-                  </>
-                )}
-              </Grid>
+           {/* Results */}
+           {results && (
+             <Card sx={{ border: 'none' }}>
+               <CardContent sx={{ p: 3 }}>
+                 <Box sx={{ mb: 2, pb: 2, borderBottom: '2px solid', borderColor: 'divider' }}>
+                   <Typography variant="h6" fontWeight={700}>
+                     {results.enhanced_analytics ? '📊 Enhanced Results' : 'Backtest Results'}
+                   </Typography>
+                 </Box>
+                 
+                 {/* Enhanced Quick Summary Cards */}
+                 <Grid container spacing={2} mb={3}>
+                   <Grid item xs={6} md={12}>
+                     <Card variant="outlined" sx={{ p: 1.5, textAlign: 'center', backgroundColor: 'primary.50', border: 'none' }}>
+                       <Box>
+                         <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                           Total Return
+                         </Typography>
+                         <Typography 
+                           variant="h6" 
+                           color={results.summary.total_return > 0 ? 'success.main' : 'error.main'} 
+                           fontWeight="bold"
+                           sx={{ mt: 0.5 }}
+                         >
+                           {results.summary.total_return.toFixed(2)}%
+                         </Typography>
+                       </Box>
+                     </Card>
+                   </Grid>
+                   <Grid item xs={6} md={12}>
+                     <Card variant="outlined" sx={{ p: 1.5, textAlign: 'center', backgroundColor: 'success.50', border: 'none' }}>
+                       <Box>
+                         <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                           Total Trades
+                         </Typography>
+                         <Typography variant="h6" color="success.main" fontWeight="bold" sx={{ mt: 0.5 }}>
+                           {results.summary.total_trades}
+                         </Typography>
+                       </Box>
+                     </Card>
+                   </Grid>
+                   {results.enhanced_analytics && (
+                     <>
+                     <Grid item xs={6} md={12}>
+                       <Card variant="outlined" sx={{ p: 1.5, textAlign: 'center', backgroundColor: 'info.50', border: 'none' }}>
+                         <Box>
+                           <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                             Sharpe Ratio
+                           </Typography>
+                           <Typography variant="h6" color="info.main" fontWeight="bold" sx={{ mt: 0.5 }}>
+                             {results.summary.sharpe_ratio?.toFixed(2) || 'N/A'}
+                           </Typography>
+                         </Box>
+                       </Card>
+                     </Grid>
+                     <Grid item xs={6} md={12}>
+                       <Card variant="outlined" sx={{ p: 1.5, textAlign: 'center', backgroundColor: 'warning.50', border: 'none' }}>
+                         <Box>
+                           <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                             Max Drawdown
+                           </Typography>
+                           <Typography variant="h6" color="warning.main" fontWeight="bold" sx={{ mt: 0.5 }}>
+                             {results.summary.max_drawdown?.toFixed(2) || 'N/A'}%
+                           </Typography>
+                         </Box>
+                       </Card>
+                     </Grid>
+                     </>
+                   )}
+                 </Grid>
 
               {/* Performance Assessment */}
               {results.enhanced_analytics && results.summary.performance_assessment && (
@@ -1152,31 +1227,32 @@ const VisualStrategyBuilder: React.FC<VisualStrategyBuilderProps> = ({
                 </Box>
               )}
 
-              {/* NEW: Next Steps after Results */}
-              {results.enhanced_analytics && (
-                <Box mt={2}>
-                  <Divider sx={{ my: 1 }} />
-                  <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-                    🎯 Next Steps
-                  </Typography>
-                  <Stack direction="row" spacing={1}>
-                    <Chip 
-                      label="View Full Analytics" 
-                      size="small" 
-                      color="primary" 
-                      onClick={() => onBacktestComplete && onBacktestComplete(results.performance_data)}
-                    />
-                    <Chip 
-                      label="Deploy Live" 
-                      size="small" 
-                      color="error" 
-                      onClick={deployRealtimeStrategy}
-                    />
-                  </Stack>
-                </Box>
-              )}
-            </Paper>
-          )}
+               {/* NEW: Next Steps after Results */}
+               {results.enhanced_analytics && (
+                 <Box mt={2}>
+                   <Divider sx={{ my: 1 }} />
+                   <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                     🎯 Next Steps
+                   </Typography>
+                   <Stack direction="row" spacing={1}>
+                     <Chip 
+                       label="View Full Analytics" 
+                       size="small" 
+                       color="primary" 
+                       onClick={() => onBacktestComplete && onBacktestComplete(results.performance_data)}
+                     />
+                     <Chip 
+                       label="Deploy Live" 
+                       size="small" 
+                       color="error" 
+                       onClick={deployRealtimeStrategy}
+                     />
+                   </Stack>
+                 </Box>
+               )}
+                </CardContent>
+              </Card>
+            )}
         </Grid>
       </Grid>
 
