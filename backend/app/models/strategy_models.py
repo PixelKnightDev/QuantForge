@@ -48,7 +48,7 @@ class StrategyRule(BaseModel):
 class PositionSizing(BaseModel):
     """Position sizing configuration"""
     method: Literal["fixed_amount", "fixed_percent", "risk_percent"] = "fixed_percent"
-    value: float = 1.0  
+    value: float = 1.0
     max_position_size: Optional[float] = None
 
 class RiskManagement(BaseModel):
@@ -58,6 +58,12 @@ class RiskManagement(BaseModel):
     max_positions: int = 1
     max_daily_trades: Optional[int] = None
 
+class TransactionCosts(BaseModel):
+    """Modeled trading frictions applied on every fill"""
+    commission_percent: float = 0.0
+    commission_fixed: float = 0.0
+    slippage_percent: float = 0.05
+
 class Strategy(BaseModel):
     """Complete trading strategy definition"""
     name: str
@@ -65,8 +71,9 @@ class Strategy(BaseModel):
     rules: List[StrategyRule]
     position_sizing: PositionSizing = PositionSizing()
     risk_management: RiskManagement = RiskManagement()
-    symbols: List[str] = [] 
-    timeframe: str = "1d" 
+    transaction_costs: TransactionCosts = TransactionCosts()
+    symbols: List[str] = []
+    timeframe: str = "1d"
     
 class Signal(BaseModel):
     """Generated trading signal"""
@@ -89,6 +96,7 @@ class Position(BaseModel):
     unrealized_pnl: Optional[float] = None
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
+    entry_commission: float = 0.0
 
 class Trade(BaseModel):
     """Completed trade"""
@@ -102,14 +110,24 @@ class Trade(BaseModel):
     pnl: float
     pnl_percent: float
     rule_name: str
-    exit_reason: str 
+    exit_reason: str
+    gross_pnl: float = 0.0
+    commission: float = 0.0
+
+class EquityPoint(BaseModel):
+    """A single mark-to-market snapshot of the portfolio during simulation"""
+    timestamp: datetime
+    value: float
+    cash: float
+    unrealized_pnl: float = 0.0
 
 class Portfolio(BaseModel):
     """Portfolio state"""
-    cash: float = 100000.0 
+    cash: float = 100000.0
     positions: List[Position] = []
     trades: List[Trade] = []
     total_value: float = 100000.0
     unrealized_pnl: float = 0.0
     realized_pnl: float = 0.0
     total_return_percent: float = 0.0
+    equity_curve: List[EquityPoint] = []

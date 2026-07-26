@@ -12,6 +12,22 @@ from ..models.performance_models import *
 
 logger = logging.getLogger(__name__)
 
+# Approximate trading periods/year per bar timeframe (252 trading days, ~6.5h/day)
+TIMEFRAME_PERIODS_PER_YEAR = {
+    "1d": 252,
+    "1h": 252 * 7,
+    "60m": 252 * 7,
+    "30m": 252 * 13,
+    "15m": 252 * 26,
+    "5m": 252 * 78,
+}
+
+
+def periods_per_year_for(timeframe: str) -> float:
+    """Map a bar timeframe to the annualization factor used for Sharpe/vol/CAGR."""
+    return TIMEFRAME_PERIODS_PER_YEAR.get(timeframe, 252)
+
+
 def safe_float(value, default=0.0):
     """Convert value to safe float, handling NaN and infinity"""
     if pd.isna(value) or np.isinf(value):
@@ -32,39 +48,40 @@ class PerformanceAnalytics:
         self.risk_free_rate = risk_free_rate
         
     def analyze_portfolio_performance(
-        self, 
-        portfolio: Portfolio, 
+        self,
+        portfolio: Portfolio,
         trades: List[Trade],
         symbol: str,
         strategy_name: str,
         start_date: str,
         end_date: str,
-        benchmark_symbol: str = "SPY"
+        benchmark_symbol: str = "SPY",
+        timeframe: str = "1d"
     ) -> PerformanceReport:
         """Generate comprehensive performance analysis"""
-        
+
         logger.info(f"Analyzing performance for {strategy_name} on {symbol}")
-        
-        # Create time series from trades
-        performance_series = self._create_performance_series(
-            portfolio, trades, start_date, end_date
-        )
-        
+        periods_per_year = periods_per_year_for(timeframe)
+
+        # Build the time series from the engine's own mark-to-market equity curve
+        # (not reconstructed independently) so this report matches what was actually simulated.
+        performance_series = self._create_performance_series(portfolio)
+
         if not performance_series:
             raise ValueError("No performance data available for analysis")
-        
+
         # Calculate core metrics
-        metrics = self._calculate_performance_metrics(performance_series, portfolio)
-        
+        metrics = self._calculate_performance_metrics(performance_series, portfolio, periods_per_year)
+
         # Risk analysis
-        risk_analysis = self._calculate_risk_metrics(performance_series)
-        
+        risk_analysis = self._calculate_risk_metrics(performance_series, periods_per_year)
+
         # Drawdown analysis
         drawdown_periods, current_drawdown = self._analyze_drawdowns(performance_series)
-        
+
         # Monthly returns breakdown
         monthly_returns = self._calculate_monthly_returns(performance_series)
-        
+
         # Benchmark comparison
         benchmark_comparison = None
         if benchmark_symbol:
@@ -74,7 +91,9 @@ class PerformanceAnalytics:
                 )
             except Exception as e:
                 logger.warning(f"Benchmark comparison failed: {e}")
-        
+
+        initial_capital = portfolio.equity_curve[0].value if portfolio.equity_curve else portfolio.cash
+
         return PerformanceReport(
             strategy_name=strategy_name,
             symbol=symbol,
@@ -88,117 +107,100 @@ class PerformanceAnalytics:
             current_drawdown=current_drawdown,
             monthly_returns=monthly_returns,
             benchmark_comparison=benchmark_comparison,
-            initial_capital=100000.0,
+            initial_capital=safe_float(initial_capital, 100000.0),
             risk_free_rate=self.risk_free_rate
         )
-    
+
     def _create_performance_series(
-        self, 
-        portfolio: Portfolio, 
-        trades: List[Trade],
-        start_date: str,
-        end_date: str
+        self,
+        portfolio: Portfolio
     ) -> List[PerformanceTimeSeriesPoint]:
-        """Create daily performance time series"""
-        
-        # Create date range
-        start = datetime.strptime(start_date, "%Y-%m-%d")
-        end = datetime.strptime(end_date, "%Y-%m-%d")
-        date_range = pd.date_range(start=start, end=end, freq='D')
-        
-        # Initialize portfolio tracking
-        initial_capital = 100000.0  
-        current_capital = initial_capital
-        
+        """Build the performance time series directly from the engine's real,
+        bar-by-bar mark-to-market equity curve (includes unrealized P&L of open
+        positions, not just realized P&L on trade-exit days)."""
+
+        if not portfolio.equity_curve:
+            return []
+
+        initial_value = safe_float(portfolio.equity_curve[0].value, 0.01) or 0.01
+        peak_value = initial_value
+        prev_value = initial_value
+
         performance_data = []
-        cumulative_return = 0.0
-        peak_value = initial_capital
-        
-        # Sort trades by date
-        sorted_trades = sorted(trades, key=lambda t: t.exit_timestamp)
-        trade_index = 0
-        
-        for current_date in date_range:
-            # Process trades that occurred on this date
-            daily_pnl = 0.0
-            while (trade_index < len(sorted_trades) and 
-                   sorted_trades[trade_index].exit_timestamp.date() <= current_date.date()):
-                trade = sorted_trades[trade_index]
-                daily_pnl += safe_float(trade.pnl, 0.0)
-                trade_index += 1
-            
-            # Update capital
-            current_capital += daily_pnl
-            current_capital = max(current_capital, 0.01) 
-            
-            # Calculate returns
-            daily_return = safe_divide(daily_pnl, current_capital, 0.0)
-            cumulative_return = safe_divide(current_capital - initial_capital, initial_capital, 0.0)
-            
-            # Update peak and calculate drawdown
-            if current_capital > peak_value:
-                peak_value = current_capital
-            
-            drawdown = safe_divide(peak_value - current_capital, peak_value, 0.0)
-            
+        for point in portfolio.equity_curve:
+            current_value = safe_float(point.value, prev_value)
+
+            daily_return = safe_divide(current_value - prev_value, prev_value, 0.0)
+            cumulative_return = safe_divide(current_value - initial_value, initial_value, 0.0)
+
+            if current_value > peak_value:
+                peak_value = current_value
+            drawdown = safe_divide(peak_value - current_value, peak_value, 0.0)
+
             performance_data.append(PerformanceTimeSeriesPoint(
-                date=current_date.date(),
-                portfolio_value=safe_float(current_capital),
+                date=point.timestamp.date(),
+                portfolio_value=safe_float(current_value),
                 daily_return=safe_float(daily_return),
                 cumulative_return=safe_float(cumulative_return),
                 drawdown=safe_float(drawdown)
             ))
-        
+
+            prev_value = current_value
+
         return performance_data
     
     def _calculate_performance_metrics(
-        self, 
+        self,
         performance_series: List[PerformanceTimeSeriesPoint],
-        portfolio: Portfolio
+        portfolio: Portfolio,
+        periods_per_year: float = 252
     ) -> PerformanceMetrics:
         """Calculate core performance metrics with NaN safety(enhanced)"""
-        
+
         if not performance_series:
             raise ValueError("No performance data available")
-        
-        # Extract returns and clean data
-        daily_returns = [safe_float(point.daily_return) for point in performance_series if abs(point.daily_return) > 1e-10]
+
+        # Extract returns and clean data. Every bar is now a real mark-to-market
+        # observation (equity_curve), so zero-return bars are kept - they are
+        # genuine "flat" periods, not a reconstruction artifact to filter out.
+        daily_returns = [safe_float(point.daily_return) for point in performance_series]
         portfolio_values = [safe_float(point.portfolio_value) for point in performance_series]
         drawdowns = [safe_float(point.drawdown) for point in performance_series]
-        
+
         # Basic return metrics
         total_return = safe_float(performance_series[-1].cumulative_return)
-        
-        # Annualized return (assuming 252 trading days)
-        days = len(performance_series)
-        if days > 0 and total_return != 0:
-            annualized_return = safe_float((1 + total_return) ** (252 / days) - 1)
+
+        # Annualized return - `days` here is the actual number of simulated bars,
+        # matched to periods_per_year for the strategy's timeframe (not calendar days).
+        num_periods = len(performance_series)
+        if num_periods > 0 and total_return != 0:
+            annualized_return = safe_float((1 + total_return) ** (periods_per_year / num_periods) - 1)
         else:
             annualized_return = 0.0
-        
+
         # Volatility - handle empty returns
         if len(daily_returns) > 1:
-            volatility = safe_float(np.std(daily_returns) * np.sqrt(252))
+            volatility = safe_float(np.std(daily_returns) * np.sqrt(periods_per_year))
         else:
             volatility = 0.0
-        
+
         # Risk-adjusted returns
         if daily_returns:
-            excess_returns = np.array(daily_returns) - (self.risk_free_rate / 252)
+            excess_returns = np.array(daily_returns) - (self.risk_free_rate / periods_per_year)
             mean_excess = safe_float(np.mean(excess_returns))
             std_excess = safe_float(np.std(excess_returns))
-            
+
             if std_excess > 0:
-                sharpe_ratio = safe_float(mean_excess / std_excess * np.sqrt(252))
+                sharpe_ratio = safe_float(mean_excess / std_excess * np.sqrt(periods_per_year))
             else:
                 sharpe_ratio = 0.0
-            
+
             # Sortino ratio (downside deviation)
             negative_returns = [r for r in daily_returns if r < 0]
             if negative_returns:
                 downside_std = safe_float(np.std(negative_returns))
                 if downside_std > 0:
-                    sortino_ratio = safe_float(mean_excess / downside_std * np.sqrt(252))
+                    sortino_ratio = safe_float(mean_excess / downside_std * np.sqrt(periods_per_year))
                 else:
                     sortino_ratio = 0.0
             else:
@@ -287,13 +289,15 @@ class PerformanceAnalytics:
         )
     
     def _calculate_risk_metrics(
-        self, 
-        performance_series: List[PerformanceTimeSeriesPoint]
+        self,
+        performance_series: List[PerformanceTimeSeriesPoint],
+        periods_per_year: float = 252
     ) -> RiskAnalysis:
         """Calculate comprehensive risk metrics with NaN safety"""
-        
-        daily_returns = [safe_float(point.daily_return) for point in performance_series if abs(point.daily_return) > 1e-10]
-        
+
+        daily_returns = [safe_float(point.daily_return) for point in performance_series]
+        periods_per_month = max(periods_per_year / 12, 1e-9)
+
         if not daily_returns or len(daily_returns) < 2:
             # Return safe default values if insufficient data
             return RiskAnalysis(
@@ -317,8 +321,8 @@ class PerformanceAnalytics:
         
         # Volatility measures
         daily_vol = safe_float(np.std(returns_array))
-        monthly_vol = safe_float(daily_vol * np.sqrt(21))  # ~21 trading days per month
-        annual_vol = safe_float(daily_vol * np.sqrt(252))
+        monthly_vol = safe_float(daily_vol * np.sqrt(periods_per_month))
+        annual_vol = safe_float(daily_vol * np.sqrt(periods_per_year))
         
         # Downside risk
         negative_returns = returns_array[returns_array < 0]
@@ -512,7 +516,7 @@ class PerformanceAnalytics:
             
             # Calculate benchmark returns
             benchmark_returns = benchmark_data['Close'].pct_change().dropna()
-            strategy_returns = [safe_float(p.daily_return) for p in performance_series if abs(p.daily_return) > 1e-10]
+            strategy_returns = [safe_float(p.daily_return) for p in performance_series]
             
             # Ensure we have data
             if len(benchmark_returns) == 0 or len(strategy_returns) == 0:

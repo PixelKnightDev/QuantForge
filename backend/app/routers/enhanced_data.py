@@ -115,6 +115,10 @@ async def get_data_sources():
     """Get available data sources - matches your frontend expectations"""
     try:
         
+        # Only sources with a real, working implementation are listed here.
+        # (Alpha Vantage/Polygon/Binance/Coinbase were previously listed as if
+        # supported, but had no integration behind them - see DataSource in
+        # models/enhanced_data.py.)
         data_sources = [
             {
                 "id": "yahoo_finance",
@@ -123,22 +127,6 @@ async def get_data_sources():
                 "supported_intervals": ["1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"],
                 "requires_api_key": False,
                 "max_historical_days": 3650  # ~10 years
-            },
-            {
-                "id": "alpha_vantage",
-                "name": "Alpha Vantage",
-                "description": "Premium financial data provider with real-time and historical data",
-                "supported_intervals": ["1m", "5m", "15m", "30m", "1h", "1d"],
-                "requires_api_key": True,
-                "max_historical_days": 7300  # ~20 years
-            },
-            {
-                "id": "polygon",
-                "name": "Polygon.io",
-                "description": "High-quality financial market data for stocks, options, and crypto",
-                "supported_intervals": ["1m", "5m", "15m", "30m", "1h", "1d"],
-                "requires_api_key": True,
-                "max_historical_days": 7300  # ~20 years
             }
         ]
         

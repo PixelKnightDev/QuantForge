@@ -69,7 +69,7 @@ async def start_realtime_strategy_unified(
         }
         await realtime_engine.start_realtime_strategy(strategy_id, strategy_config)
         
-        background_tasks.add_task(simulate_realtime_data_for_strategy, strategy_id)
+        background_tasks.add_task(simulate_paper_trading_prices, strategy_id)
         
         logger.info(f"✅ Started real-time strategy: {strategy_id}")
         
@@ -77,10 +77,12 @@ async def start_realtime_strategy_unified(
             "success": True,
             "strategy_id": strategy_id,
             "status": "started",
-            "message": f"Real-time strategy '{strategy_name}' started successfully",
-            "config": strategy_config
+            "message": f"Paper-trading strategy '{strategy_name}' started successfully",
+            "config": strategy_config,
+            "data_mode": "simulated_paper_trading",
+            "data_mode_note": "Prices are simulated (seeded from the symbol's last real close), not a live market feed."
         }
-        
+
     except Exception as e:
         logger.error(f"❌ Error starting real-time strategy: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to start strategy: {str(e)}")
@@ -184,7 +186,8 @@ async def get_active_realtime_strategies():
                     "start_time": start_time_str,
                     "trades_count": len(strategy_info.get("trades", [])),
                     "strategy_type": str(strategy_info.get("strategy_type", "unknown")),
-                    "current_performance": metrics
+                    "current_performance": metrics,
+                    "data_mode": "simulated_paper_trading"
                 }
                 
                 # Only add active strategies
@@ -238,8 +241,8 @@ async def start_demo_strategy(background_tasks: BackgroundTasks):
             "take_profit_percent": 4.0
         }
     )
-    
-    return await start_realtime_strategy(demo_request, background_tasks)
+
+    return await start_realtime_strategy_unified(demo_request.model_dump(), background_tasks)
 
 @router.post("/trigger-demo-signal/{strategy_id}")
 async def trigger_demo_signal(strategy_id: str):
@@ -316,6 +319,8 @@ async def deploy_strategy(request: dict):
             "strategy_id": strategy_id,
             "status": "deployed",
             "message": f"Strategy '{strategy_name}' deployed successfully",
+            "data_mode": "simulated_paper_trading",
+            "data_mode_note": "Prices are simulated (seeded from the symbol's last real close), not a live market feed.",
             "deployment_info": {
                 "strategy_id": strategy_id,
                 "name": strategy_name,
@@ -340,7 +345,7 @@ async def start_realtime_strategy_dict(request: dict):
     """Start a real-time strategy from dict (for Visual Strategy Builder compatibility)"""
     try:
         logger.info(f"🚀 Starting strategy from dict: {request}")
-        
+
         strategy_request = StartRealtimeStrategyRequest(
             strategy_name=request.get("strategy_name", "Real-time Strategy"),
             symbol=request.get("symbol", "AAPL"),
@@ -350,25 +355,25 @@ async def start_realtime_strategy_dict(request: dict):
             strategy_type=request.get("strategy_type", "visual_builder"),
             parameters=request.get("parameters", {})
         )
-        
+
         # Use the existing endpoint
         background_tasks = BackgroundTasks()
-        result = await start_realtime_strategy(strategy_request, background_tasks)
-        
-        logger.info(f"✅ Started strategy via dict: {result.strategy_id}")
-        
+        result = await start_realtime_strategy_unified(strategy_request.model_dump(), background_tasks)
+
+        logger.info(f"✅ Started strategy via dict: {result['strategy_id']}")
+
         return {
             "success": True,
-            "strategy_id": result.strategy_id,
-            "status": result.status,
-            "message": result.message,
-            "config": result.config
+            "strategy_id": result["strategy_id"],
+            "status": result["status"],
+            "message": result["message"],
+            "config": result["config"]
         }
-        
+
     except Exception as e:
         logger.error(f"❌ Strategy start from dict failed: {e}")
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"Failed to start strategy: {str(e)}"
         )
 
@@ -390,31 +395,58 @@ async def debug_strategies():
             "timestamp": datetime.now().isoformat()
         }
 
-async def simulate_realtime_data_for_strategy(strategy_id: str):
+async def _get_seed_price(symbol: str, default: float = 150.0) -> float:
+    """Fetch the symbol's last real close as a starting point for the simulator.
+
+    Falls back to `default` if the fetch fails - this is only used to seed the
+    paper-trading simulator at a plausible level, not as live pricing.
     """
-    Background task to simulate real-time market data for a strategy
-    This would be replaced with actual market data feeds in production
+    try:
+        import yfinance as yf
+        ticker = yf.Ticker(symbol)
+        history = ticker.history(period="5d")
+        if not history.empty:
+            return float(history['Close'].iloc[-1])
+    except Exception as e:
+        logger.warning(f"Could not fetch seed price for {symbol}, using default ${default}: {e}")
+    return default
+
+
+async def simulate_paper_trading_prices(strategy_id: str):
+    """
+    Background task that generates SIMULATED prices for paper-trading strategies.
+
+    This is not a live market data feed. It seeds from the symbol's last real
+    close (via yfinance) and then evolves with a small, mean-reverting random
+    walk so price paths look like plausible short-horizon equity ticks rather
+    than a raw uniform jump. Swap this for a real streaming feed (e.g. Alpaca's
+    market data API) to make this genuinely live.
     """
     import random
-    
-    logger.info(f"🔄 Starting real-time data simulation for strategy: {strategy_id}")
-    
-    base_price = 150.0
+
+    strategy_info = realtime_engine.active_strategies.get(strategy_id)
+    symbol = strategy_info["config"]["symbol"] if strategy_info else "AAPL"
+    base_price = await _get_seed_price(symbol)
     current_price = base_price
-    
+
+    logger.info(f"🎮 Starting paper-trading price simulator for {strategy_id} ({symbol} @ ${base_price:.2f}, simulated - not live data)")
+
     try:
         while strategy_id in realtime_engine.active_strategies:
             strategy_info = realtime_engine.active_strategies[strategy_id]
-            
+
             # Skip if strategy is not active
             if strategy_info["status"] != "active":
                 await asyncio.sleep(1)
                 continue
-            
-            # Simulate price movement (random walk)
-            price_change = random.uniform(-0.02, 0.02)  # ±2% change
-            current_price = max(current_price * (1 + price_change), 1.0)  # Ensure price > 0
-            
+
+            # Small per-tick step (~6 bps std) with mild pull back toward the
+            # seed price, instead of an unbounded ±2%/second walk that would
+            # compound to absurd prices within minutes.
+            step = random.gauss(0, 0.0006)
+            reversion = (base_price - current_price) / base_price * 0.01
+            current_price = max(current_price * (1 + step + reversion), 0.01)
+
             # Create market data
             market_data = {
                 "symbol": strategy_info["config"]["symbol"],
@@ -422,22 +454,23 @@ async def simulate_realtime_data_for_strategy(strategy_id: str):
                 "volume": random.randint(1000, 10000),
                 "timestamp": datetime.now().isoformat(),
                 "bid": round(current_price - 0.01, 2),
-                "ask": round(current_price + 0.01, 2)
+                "ask": round(current_price + 0.01, 2),
+                "simulated": True
             }
-            
+
             # Process the data through the strategy engine
             await realtime_engine.process_realtime_data(
-                market_data["symbol"], 
+                market_data["symbol"],
                 market_data
             )
-            
+
             # Wait before next update (1 second intervals)
             await asyncio.sleep(1)
-            
+
     except Exception as e:
-        logger.error(f"❌ Error in real-time data simulation for {strategy_id}: {e}")
+        logger.error(f"❌ Error in paper-trading price simulator for {strategy_id}: {e}")
     finally:
-        logger.info(f"🛑 Stopped real-time data simulation for strategy: {strategy_id}")
+        logger.info(f"🛑 Stopped paper-trading price simulator for strategy: {strategy_id}")
 
 @router.post("/start-market-data-simulation")
 async def start_market_data_simulation(background_tasks: BackgroundTasks):
@@ -457,7 +490,7 @@ async def start_market_data_simulation(background_tasks: BackgroundTasks):
             )
         for strategy_id, strategy_info in realtime_engine.active_strategies.items():
             if strategy_info["status"] == "active":
-                background_tasks.add_task(simulate_realtime_data_for_strategy, strategy_id)
+                background_tasks.add_task(simulate_paper_trading_prices, strategy_id)
         
         return {
             "message": f"Market data simulation started for {active_count} active strategies",
@@ -652,7 +685,9 @@ async def get_realtime_engine_health():
             },
             "websocket_status": "available",  # This would check actual WebSocket health
             "memory_usage": "normal",  # This would check actual memory usage
-            "performance": "optimal"
+            "performance": "optimal",
+            "data_mode": "simulated_paper_trading",
+            "data_mode_note": "This engine runs a simulated price feed for paper trading, not a live market data connection."
         }
         
         return health_status

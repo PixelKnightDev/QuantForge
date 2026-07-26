@@ -35,17 +35,16 @@ A comprehensive, full-stack trading strategy development and backtesting platfor
 - **Risk analysis** with drawdown monitoring and VaR calculations
 - **Visual performance reports** with heatmaps and distribution analysis
 
-### 📈 Real-time Strategy Deployment
-- **Live strategy monitoring** with WebSocket connections
-- **Real-time signal generation** and trade execution simulation
-- **Performance tracking** with live P&L updates
+### 📈 Paper Trading Simulator
+- **Simulated strategy monitoring** with WebSocket connections pushing live updates to the UI
+- **Signal generation** and trade execution against simulated price ticks (a mean-reverting random walk seeded from the symbol's last real close - not a live market data feed; see Roadmap for wiring up a real feed)
+- **Performance tracking** with live P&L updates as simulated prices move
 - **Strategy health monitoring** and alerts
 
 ### 🗃️ Enhanced Data Management
-- **Multi-source data integration** (Yahoo Finance, Alpha Vantage, Polygon.io)
+- **Yahoo Finance integration** for historical and reference data (Alpha Vantage/Polygon.io/Binance/Coinbase are not yet implemented - see Roadmap)
 - **Bulk data download** with parallel processing
 - **Data quality analysis** and validation
-- **CSV upload support** for custom datasets
 - **Advanced caching** for optimal performance
 
 ## 🏛️ Architecture
@@ -256,15 +255,17 @@ Stop Loss: 3%
 5. **Trade Duration Analysis**: Performance by holding period
 6. **Rolling Risk Metrics**: Dynamic risk measurement
 
-## 🔴 Real-time Monitoring
+## 🔴 Paper Trading Simulator
+
+> **Note:** This runs on simulated price data (a mean-reverting random walk seeded from the symbol's last real close), not a live market feed. The UI labels this clearly ("Simulated data" badge). See the Roadmap for wiring up a real feed (e.g. Alpaca's market data API).
 
 ### Features
 
-- **Live Strategy Execution**: Strategies run continuously on market data
+- **Continuous Strategy Execution**: Strategies run continuously against simulated price ticks
 - **WebSocket Connections**: Real-time updates for all connected clients
-- **Signal Generation**: Live buy/sell signals based on market conditions
-- **Trade Simulation**: Paper trading with realistic execution
-- **Performance Tracking**: Real-time P&L and portfolio updates
+- **Signal Generation**: Buy/sell signals based on the simulated price path
+- **Trade Simulation**: Paper trading with commission/slippage modeling
+- **Performance Tracking**: Live P&L and portfolio updates as the simulation runs
 
 ### WebSocket Events
 
@@ -365,23 +366,13 @@ GET /api/enhanced-data/jobs/{job_id}
 GET /api/enhanced-data/data/analyze/{symbol}
 ```
 
-### Authentication (Optional)
+### Authentication
 
-For production deployment, implement authentication:
-
-```python
-# Add to backend/app/middleware/auth.py
-from fastapi import HTTPException, Depends
-from fastapi.security import HTTPBearer
-
-security = HTTPBearer()
-
-async def verify_token(token: str = Depends(security)):
-    # Implement your authentication logic
-    if not is_valid_token(token):
-        raise HTTPException(status_code=401, detail="Invalid token")
-    return get_user_from_token(token)
-```
+**Not implemented yet.** There is currently no auth on any endpoint - anyone who
+can reach the API can create/stop strategies, trigger downloads, and read
+internal debug endpoints. Do not deploy this with sensitive data or expect it
+to be multi-tenant safe until basic auth (e.g. JWT via `fastapi.security`) is
+added. This is tracked in the Roadmap.
 
 ## ⚙️ Configuration
 
@@ -398,24 +389,10 @@ REACT_APP_MAX_SYMBOLS_PER_STRATEGY=10
 
 ### Data Source Configuration
 
-Configure multiple data sources in `backend/app/config/data_sources.py`:
-
-```python
-DATA_SOURCES = {
-    "yahoo_finance": {
-        "name": "Yahoo Finance",
-        "free": True,
-        "rate_limit": 2000,  # requests per hour
-        "intervals": ["1m", "5m", "15m", "30m", "1h", "1d", "1wk", "1mo"]
-    },
-    "alpha_vantage": {
-        "name": "Alpha Vantage",
-        "requires_api_key": True,
-        "rate_limit": 500,  # requests per day
-        "intervals": ["1min", "5min", "15min", "30min", "60min", "daily"]
-    }
-}
-```
+Yahoo Finance is currently the only implemented data source, configured in
+`backend/app/services/enhanced_data_service.py` (`_setup_exchange_configs`).
+Additional sources (Alpha Vantage, Polygon.io, a real broker feed) are on the
+roadmap but not yet wired up - see Roadmap below before assuming they work.
 
 ### Production Deployment
 
@@ -609,12 +586,13 @@ npm run lint
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+No license has been chosen yet - there is no LICENSE file in this repo, so
+default copyright applies (all rights reserved) until one is added.
 
 ## 🙏 Acknowledgments
 
-- **Technical Analysis Library** - TA-Lib for technical indicators
-- **Financial Data** - Yahoo Finance, Alpha Vantage APIs
+- **Technical Indicators** - custom implementation in `backend/app/services/technical_indicators.py` (no TA-Lib dependency)
+- **Financial Data** - Yahoo Finance via `yfinance`
 - **UI Components** - Material-UI for React components
 - **WebSocket** - FastAPI WebSocket support
 - **Visualization** - Recharts for performance charts
@@ -625,6 +603,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Email**: pratyushyadav0106@gmail.com
 
 ## 🔮 Roadmap
+
+### Near-term (engineering foundations)
+- [ ] Authentication (currently none - see Configuration > Authentication)
+- [ ] Real persistence (currently everything lives in in-memory dicts and is lost on restart)
+- [ ] A real live/paper-trading data feed (e.g. Alpaca) to replace the simulated price walk
+- [ ] Automated tests and CI
+- [ ] Wire up the CSV upload route (models/service exist but no endpoint calls them yet)
 
 ### v2.1 (Next Release)
 - [ ] **Options trading** support

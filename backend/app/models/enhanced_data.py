@@ -5,11 +5,15 @@ from enum import Enum
 import hashlib
 
 class DataSource(str, Enum):
-    """Available data sources"""
+    """Available data sources.
+
+    Only YAHOO_FINANCE is actually implemented today. The previous BINANCE/
+    COINBASE/ALPACA members had no real integration behind them - they just
+    called the Yahoo Finance downloader and relabeled the result, which
+    silently misrepresented where the data came from. Removed rather than
+    faked; add a member back once a source has a real implementation.
+    """
     YAHOO_FINANCE = "yahoo_finance"
-    BINANCE = "binance" 
-    COINBASE = "coinbase"
-    ALPACA = "alpaca"
     CSV_UPLOAD = "csv_upload"
     CUSTOM = "custom"
 

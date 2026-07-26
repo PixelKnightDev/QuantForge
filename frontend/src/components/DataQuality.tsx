@@ -91,10 +91,11 @@ const DataQuality: React.FC<DataQualityProps> = ({ availableSymbols }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Only Yahoo Finance is actually implemented on the backend today.
+  // (Binance/Coinbase were previously listed here but silently returned
+  // relabeled Yahoo Finance data - removed rather than left misleading.)
   const DATA_SOURCES = [
     { value: 'yahoo_finance', label: 'Yahoo Finance' },
-    { value: 'binance', label: 'Binance' },
-    { value: 'coinbase', label: 'Coinbase Pro' },
     { value: 'csv_upload', label: 'CSV Upload' }
   ];
 

@@ -453,50 +453,30 @@ class EnhancedDataService:
                 supported_intervals=["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d", "5d", "1wk", "1mo", "3mo"],
                 max_historical_days=2000,
                 requests_per_minute=2000
-            ),
-            DataSource.BINANCE: ExchangeConfig(
-                exchange_name="Binance",
-                base_url="https://api.binance.com",
-                websocket_url="wss://stream.binance.com:9443",
-                supported_intervals=["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"],
-                max_historical_days=1000,
-                requests_per_minute=1200
-            ),
-            DataSource.COINBASE: ExchangeConfig(
-                exchange_name="Coinbase Pro",
-                base_url="https://api.pro.coinbase.com",
-                websocket_url="wss://ws-feed.pro.coinbase.com",
-                supported_intervals=["1m", "5m", "15m", "1h", "6h", "1d"],
-                max_historical_days=300,
-                requests_per_minute=600
             )
         }
-    
-    async def download_data(self, symbol: str, source: DataSource, 
+
+    async def download_data(self, symbol: str, source: DataSource,
                           period: str = "1y", interval: str = "1d",
                           use_cache: bool = True) -> List[EnhancedOHLCVData]:
         """Download data from specified source with caching"""
-        
+
         # Calculate date range
         end_date = datetime.now()
         start_date = self._parse_period_to_datetime(period, end_date)
-        
+
         # Check cache first
         if use_cache:
             cache_key = self.cache._generate_cache_key(symbol, source, start_date, end_date, interval)
             cached_data = await self.cache.get(cache_key)
             if cached_data:
                 return cached_data
-        
+
         # Download based on source
         if source == DataSource.YAHOO_FINANCE:
             data = await self._download_yahoo_finance(symbol, period, interval)
-        elif source == DataSource.BINANCE:
-            data = await self._download_binance(symbol, start_date, end_date, interval)
-        elif source == DataSource.COINBASE:
-            data = await self._download_coinbase(symbol, start_date, end_date, interval)
         else:
-            raise ValueError(f"Unsupported data source: {source}")
+            raise ValueError(f"Unsupported data source: {source}. Only Yahoo Finance is currently implemented.")
         
         # Cache the results
         if use_cache and data:
@@ -598,62 +578,6 @@ class EnhancedDataService:
         
         return None
         
-    async def _download_binance(self, symbol: str, start_date: datetime, 
-                                end_date: datetime, interval: str) -> List[EnhancedOHLCVData]:
-        """Download from Binance API - Falls back to Yahoo Finance for now"""
-        logger.info(f"Binance API not implemented yet, falling back to Yahoo Finance for {symbol}")
-    
-        duration = end_date - start_date
-        if duration.days <= 5:
-            period = "5d"
-        elif duration.days <= 30:
-            period = "1mo"
-        elif duration.days <= 90:
-            period = "3mo"
-        elif duration.days <= 180:
-            period = "6mo"
-        elif duration.days <= 365:
-            period = "1y"
-        else:
-            period = "2y"
-
-        data = await self._download_yahoo_finance(symbol, period, interval)
-
-        for point in data:
-            point.source = DataSource.BINANCE
-    
-        logger.info(f"Fallback: Retrieved {len(data)} records for {symbol} via Yahoo Finance")
-        return data
-    async def _download_coinbase(self, symbol: str, start_date: datetime,
-                           end_date: datetime, interval: str) -> List[EnhancedOHLCVData]:
-        """Download from Coinbase API - Falls back to Yahoo Finance for now"""
-        logger.info(f"Coinbase API not implemented yet, falling back to Yahoo Finance for {symbol}")
-    
-        duration = end_date - start_date
-        if duration.days <= 5:
-            period = "5d"
-        elif duration.days <= 30:
-            period = "1mo"
-        elif duration.days <= 90:
-            period = "3mo"
-        elif duration.days <= 180:
-            period = "6mo"
-        elif duration.days <= 365:
-            period = "1y"
-        else:
-            period = "2y"
-    
-        # Use Yahoo Finance as fallback but mark as Coinbase source
-        data = await self._download_yahoo_finance(symbol, period, interval)
-    
-        # Update source to indicate it came from Coinbase request
-        for point in data:
-            point.source = DataSource.COINBASE
-    
-        logger.info(f"Fallback: Retrieved {len(data)} records for {symbol} via Yahoo Finance")
-        return data
- 
-    
     async def _calculate_enhanced_fields(self, data: List[EnhancedOHLCVData]) -> List[EnhancedOHLCVData]:
         """FIXED: Calculate additional fields without data loss"""
         if len(data) < 2:

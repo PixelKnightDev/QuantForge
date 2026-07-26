@@ -200,87 +200,102 @@ class StrategyEngine:
         
         return max(0, shares)
     
-    async def _check_risk_management(self, position: Position, current_price: float, 
+    async def _check_risk_management(self, position: Position, current_price: float,
                                    current_timestamp: datetime, strategy: Strategy):
         """Check if position should be closed due to risk management rules"""
-        
+
         # Check stop loss
         if position.stop_loss and current_price <= position.stop_loss:
             logger.info(f"Stop loss triggered for {position.symbol} at {current_price:.2f}")
-            await self._close_position(position, current_price, current_timestamp, "stop_loss")
+            await self._close_position(position, current_price, current_timestamp, "stop_loss", strategy)
             return True
-        
+
         # Check take profit
         if position.take_profit and current_price >= position.take_profit:
             logger.info(f"Take profit triggered for {position.symbol} at {current_price:.2f}")
-            await self._close_position(position, current_price, current_timestamp, "take_profit")
+            await self._close_position(position, current_price, current_timestamp, "take_profit", strategy)
             return True
-        
-        return False
-    
 
-    async def simulate_strategy(self, strategy: Strategy, 
-                               symbol: str, start_date: str, 
-                               end_date: str) -> Portfolio:
-        """Run complete strategy simulation - ENHANCED"""
-        # Initialize portfolio with starting cash
-        if strategy.position_sizing.method == "fixed_amount":
-            initial_cash = 100000.0  # Default initial cash
-        else:
-            initial_cash = 100000.0  # Standard starting amount
-            
+        return False
+
+
+    async def simulate_strategy(self, strategy: Strategy,
+                               symbol: str, start_date: str,
+                               end_date: str, initial_capital: float = 100000.0) -> Portfolio:
+        """Run complete strategy simulation with real daily mark-to-market tracking"""
+        initial_cash = initial_capital
+
         self.portfolio = Portfolio()
         self.portfolio.cash = initial_cash
         self.portfolio.total_value = initial_cash
-        
+
         data = await self.get_market_data(symbol, start_date, end_date, strategy.timeframe)
-        
+
         if data.empty:
             logger.error(f"No data available for {symbol}")
             return self.portfolio
-        
+
         logger.info(f"Starting strategy simulation for {symbol} with {len(data)} data points")
         logger.info(f"Initial cash: ${initial_cash:.2f}")
-        
+
+        # Seed the equity curve at t=0 so annualization/volatility reflect the full period
+        self.portfolio.equity_curve = [
+            EquityPoint(timestamp=data.index[0], value=initial_cash, cash=initial_cash, unrealized_pnl=0.0)
+        ]
+
         signals = await self.generate_signals(strategy, symbol, data)
         logger.info(f"Generated {len(signals)} signals")
-        
+
         for i in range(1, len(data)):
             current_timestamp = data.index[i]
             current_price = data.iloc[i]['close']
-            
+
             # Update portfolio value and check risk management for existing positions
             positions_to_remove = []
             for position in self.portfolio.positions:
                 position.current_price = current_price
                 position.unrealized_pnl = (current_price - position.entry_price) * position.quantity
-                
+
                 # Check risk management rules
                 if await self._check_risk_management(position, current_price, current_timestamp, strategy):
                     positions_to_remove.append(position)
-            
+
             # Remove closed positions
             for position in positions_to_remove:
                 if position in self.portfolio.positions:
                     self.portfolio.positions.remove(position)
-            
+
             # Process any signals for this timestamp
             current_signals = [s for s in signals if s.timestamp == current_timestamp]
             for signal in current_signals:
                 await self._process_signal(signal, strategy, data)
-            
-            # Update portfolio total value
+
+            # Update portfolio total value (mark-to-market every bar, not just on trade close)
             self._update_portfolio_value(current_price)
-        
+            self.portfolio.equity_curve.append(EquityPoint(
+                timestamp=current_timestamp,
+                value=self.portfolio.total_value,
+                cash=self.portfolio.cash,
+                unrealized_pnl=self.portfolio.unrealized_pnl
+            ))
+
         # Close any remaining positions at the end
         if self.portfolio.positions:
             final_price = data.iloc[-1]['close']
             final_timestamp = data.index[-1]
             for position in self.portfolio.positions.copy():
                 await self._close_position(
-                    position, final_price, final_timestamp, "end_of_backtest"
+                    position, final_price, final_timestamp, "end_of_backtest", strategy
                 )
-        
+            # Record the cost of liquidating at the end of the backtest
+            self._update_portfolio_value(final_price)
+            self.portfolio.equity_curve.append(EquityPoint(
+                timestamp=final_timestamp,
+                value=self.portfolio.total_value,
+                cash=self.portfolio.cash,
+                unrealized_pnl=self.portfolio.unrealized_pnl
+            ))
+
         # Calculate final portfolio metrics
         if not data.empty:
             final_price = data.iloc[-1]['close']
@@ -447,87 +462,119 @@ class StrategyEngine:
         existing_position = next(
             (p for p in self.portfolio.positions if p.symbol == signal.symbol), None
         )
-        
+
         if existing_position:
             return
-        
+
         if len(self.portfolio.positions) >= strategy.risk_management.max_positions:
             return
-        
+
+        costs = strategy.transaction_costs
+        # Slippage: buys fill slightly worse than the signal price
+        effective_price = signal.price * (1 + costs.slippage_percent / 100)
+
         available_cash = self.portfolio.cash
-        shares = self.calculate_position_size(strategy, signal.price, available_cash)
-        
+        shares = self.calculate_position_size(strategy, effective_price, available_cash)
+
         if shares <= 0:
             return
-        
-        total_cost = shares * signal.price
-        
+
+        def cost_for(shares: float) -> Tuple[float, float]:
+            commission = costs.commission_fixed + (shares * effective_price * costs.commission_percent / 100)
+            return shares * effective_price + commission, commission
+
+        total_cost, entry_commission = cost_for(shares)
+
         if total_cost > available_cash:
-            shares = available_cash / signal.price
-            total_cost = shares * signal.price
-        
+            # Solve for the largest share count whose all-in cost fits available cash
+            denom = effective_price * (1 + costs.commission_percent / 100)
+            shares = max(0.0, (available_cash - costs.commission_fixed) / denom) if denom > 0 else 0.0
+            total_cost, entry_commission = cost_for(shares)
+
+        if shares <= 0:
+            return
+
         position = Position(
             symbol=signal.symbol,
             entry_timestamp=signal.timestamp,
-            entry_price=signal.price,
+            entry_price=effective_price,
             quantity=shares,
-            current_price=signal.price
+            current_price=effective_price,
+            entry_commission=entry_commission
         )
-        
+
         if strategy.risk_management.stop_loss_percent:
-            position.stop_loss = signal.price * (1 - strategy.risk_management.stop_loss_percent / 100)
-        
+            position.stop_loss = effective_price * (1 - strategy.risk_management.stop_loss_percent / 100)
+
         if strategy.risk_management.take_profit_percent:
-            position.take_profit = signal.price * (1 + strategy.risk_management.take_profit_percent / 100)
-        
+            position.take_profit = effective_price * (1 + strategy.risk_management.take_profit_percent / 100)
+
         self.portfolio.positions.append(position)
         self.portfolio.cash -= total_cost
-        
-        logger.info(f"Opened position: {signal.symbol} at {signal.price:.2f} for {shares:.2f} shares")
-    
+
+        logger.info(f"Opened position: {signal.symbol} at {effective_price:.2f} for {shares:.2f} shares (commission ${entry_commission:.2f})")
+
     async def _process_sell_signal(self, signal: Signal, strategy: Strategy):
         """Process sell signal"""
         position = next(
             (p for p in self.portfolio.positions if p.symbol == signal.symbol), None
         )
-        
+
         if position:
-            await self._close_position(position, signal.price, signal.timestamp, signal.rule_name)
-    
-    async def _close_position(self, position: Position, exit_price: float, 
-                             exit_timestamp: datetime, exit_reason: str):
+            await self._close_position(position, signal.price, signal.timestamp, signal.rule_name, strategy)
+
+    async def _close_position(self, position: Position, exit_price: float,
+                             exit_timestamp: datetime, exit_reason: str, strategy: Strategy):
         """Close a position and create trade record"""
-        pnl = (exit_price - position.entry_price) * position.quantity
-        pnl_percent = ((exit_price - position.entry_price) / position.entry_price) * 100
-        
+        costs = strategy.transaction_costs
+        # Slippage: sells fill slightly worse than the requested exit price
+        effective_exit_price = exit_price * (1 - costs.slippage_percent / 100)
+        exit_commission = costs.commission_fixed + (position.quantity * effective_exit_price * costs.commission_percent / 100)
+
+        gross_pnl = (effective_exit_price - position.entry_price) * position.quantity
+        total_commission = position.entry_commission + exit_commission
+        pnl = gross_pnl - total_commission
+        cost_basis = position.entry_price * position.quantity
+        pnl_percent = (pnl / cost_basis) * 100 if cost_basis > 0 else 0.0
+
         trade = Trade(
             symbol=position.symbol,
             entry_timestamp=position.entry_timestamp,
             exit_timestamp=exit_timestamp,
             entry_price=position.entry_price,
-            exit_price=exit_price,
+            exit_price=effective_exit_price,
             quantity=position.quantity,
             pnl=pnl,
             pnl_percent=pnl_percent,
             rule_name=exit_reason,
-            exit_reason=exit_reason
+            exit_reason=exit_reason,
+            gross_pnl=gross_pnl,
+            commission=total_commission
         )
-        
+
         self.portfolio.trades.append(trade)
-        self.portfolio.cash += position.quantity * exit_price
+        self.portfolio.cash += position.quantity * effective_exit_price - exit_commission
         self.portfolio.realized_pnl += pnl
         if position in self.portfolio.positions:
             self.portfolio.positions.remove(position)
-        
-        logger.info(f"Closed position: {position.symbol} at {exit_price:.2f}, P&L: ${pnl:.2f} ({pnl_percent:.2f}%)")
+
+        logger.info(f"Closed position: {position.symbol} at {effective_exit_price:.2f}, P&L: ${pnl:.2f} ({pnl_percent:.2f}%), commission: ${total_commission:.2f}")
     
     def _update_portfolio_value(self, current_price: float):
-        """Update portfolio total value"""
-        unrealized_pnl = 0
+        """Update portfolio total value.
+
+        `cash` already had each open position's full cost basis subtracted at
+        entry, so total_value must add back the position's current *market
+        value* (quantity * current_price) - not just its unrealized P&L, which
+        would silently drop the principal until the trade closes.
+        """
+        unrealized_pnl = 0.0
+        positions_market_value = 0.0
         for position in self.portfolio.positions:
             position.current_price = current_price
             position.unrealized_pnl = (current_price - position.entry_price) * position.quantity
             unrealized_pnl += position.unrealized_pnl
-        
+            positions_market_value += position.quantity * current_price
+
         self.portfolio.unrealized_pnl = unrealized_pnl
-        self.portfolio.total_value = self.portfolio.cash + unrealized_pnl
+        self.portfolio.total_value = self.portfolio.cash + positions_market_value

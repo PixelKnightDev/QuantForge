@@ -137,8 +137,15 @@ async def run_strategy_backtest(request: BacktestRequest):
         initial_capital = request.initial_capital
         
         # Run strategy simulation
-        portfolio = await strategy_engine.simulate_strategy(strategy, symbol, start_date, end_date)
-        
+        portfolio = await strategy_engine.simulate_strategy(
+            strategy, symbol, start_date, end_date, initial_capital=initial_capital
+        )
+
+        # The engine's own bar-by-bar equity curve is the single source of truth for
+        # every chart/series below - no more independently-reconstructed portfolio values.
+        equity_values = [p.value for p in portfolio.equity_curve] or [initial_capital]
+        equity_dates = [p.timestamp.isoformat() for p in portfolio.equity_curve] or [start_date]
+
         if not portfolio.trades:
             logger.warning("No trades generated - returning basic portfolio data")
             return {
@@ -162,8 +169,8 @@ async def run_strategy_backtest(request: BacktestRequest):
                     "positions": [],
                     "trades": []
                 },
-                "portfolio_values": [initial_capital],
-                "portfolio_dates": [start_date],
+                "portfolio_values": equity_values,
+                "portfolio_dates": equity_dates,
                 "performance_report": {
                     "summary": {
                         "strategy_performance": "No trades executed",
@@ -184,26 +191,16 @@ async def run_strategy_backtest(request: BacktestRequest):
             strategy_name=strategy.name,
             start_date=start_date,
             end_date=end_date,
-            benchmark_symbol="SPY"
+            benchmark_symbol="SPY",
+            timeframe=strategy.timeframe
         )
-        
+
         logger.info("📊 Generating portfolio time series for advanced visualizations")
-        
-        # Create portfolio value progression over time
-        portfolio_values = [initial_capital]
-        portfolio_dates = [start_date]  
-        
-        sorted_trades = sorted(portfolio.trades, key=lambda t: t.exit_timestamp)
-        
-        current_value = initial_capital
-        for trade in sorted_trades:
-            current_value += trade.pnl  
-            portfolio_values.append(current_value)
-            portfolio_dates.append(trade.exit_timestamp.isoformat())
-        
-        portfolio_values.append(portfolio.total_value)
-        portfolio_dates.append(end_date)
-        
+
+        # Reuse the same real equity curve computed above (one source of truth)
+        portfolio_values = equity_values
+        portfolio_dates = equity_dates
+
         logger.info(f"📈 Generated {len(portfolio_values)} portfolio value points over time")
         
         # Convert portfolio to dict for response
